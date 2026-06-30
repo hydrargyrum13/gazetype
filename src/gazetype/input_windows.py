@@ -13,6 +13,18 @@ KEYEVENTF_UNICODE = 0x0004
 VK_BACK = 0x08
 VK_RETURN = 0x0D
 VK_SPACE = 0x20
+ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = (
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    )
 
 
 class KEYBDINPUT(ctypes.Structure):
@@ -21,12 +33,16 @@ class KEYBDINPUT(ctypes.Structure):
         ("wScan", wintypes.WORD),
         ("dwFlags", wintypes.DWORD),
         ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG)),
+        ("dwExtraInfo", ULONG_PTR),
     )
 
 
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = (("uMsg", wintypes.DWORD), ("wParamL", wintypes.WORD), ("wParamH", wintypes.WORD))
+
+
 class _INPUTUNION(ctypes.Union):
-    _fields_ = (("ki", KEYBDINPUT),)
+    _fields_ = (("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT))
 
 
 class INPUT(ctypes.Structure):
@@ -60,7 +76,6 @@ class WindowsInputSender:
         inputs = (INPUT * len(encoded))()
         for index, (virtual_key, scan_code, flags) in enumerate(encoded):
             inputs[index].type = INPUT_KEYBOARD
-            inputs[index].ki = KEYBDINPUT(virtual_key, scan_code, flags, 0, None)
+            inputs[index].ki = KEYBDINPUT(virtual_key, scan_code, flags, 0, 0)
         sent = self._send_input(len(inputs), inputs, ctypes.sizeof(INPUT))
         return sent == len(inputs)
-
