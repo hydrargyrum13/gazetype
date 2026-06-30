@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from gazetype.settings import AppSettings
-from gazetype.ui import SettingsWindow
+from gazetype.ui import KeyboardOverlay, SettingsWindow
 
 
 def test_camera_preview_cards_select_camera() -> None:
@@ -21,3 +21,12 @@ def test_camera_preview_cards_select_camera() -> None:
     window.close()
     assert application is not None
 
+
+def test_overlay_tracks_visible_gaze_position() -> None:
+    application = QApplication.instance() or QApplication([])
+    overlay = KeyboardOverlay()
+    overlay.set_gaze_state("a", 0.5, 30.0, (0.25, 0.75))
+    assert overlay.gaze_position == (0.25, 0.75)
+    assert overlay.keyboard.top == 0.03
+    overlay.close()
+    assert application is not None

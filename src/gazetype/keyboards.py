@@ -45,7 +45,7 @@ _LAYOUT_ROWS: dict[KeyboardLayout, tuple[tuple[tuple[str, str, float], ...], ...
 class KeyboardGeometry:
     """Normalized screen-space keyboard geometry."""
 
-    def __init__(self, layout: KeyboardLayout, top: float = 0.57, bottom: float = 0.98):
+    def __init__(self, layout: KeyboardLayout, top: float = 0.03, bottom: float = 0.98):
         self.layout = layout
         self.top = top
         self.bottom = bottom
@@ -80,4 +80,3 @@ class KeyboardGeometry:
 
     def by_id(self, key_id: str) -> Key:
         return next(key for key in self.keys if key.id == key_id)
-

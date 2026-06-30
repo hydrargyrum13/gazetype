@@ -141,6 +141,7 @@ class GazetypeController:
             self.landing.candidate_key,
             self.landing.candidate_progress,
             frame.fps,
+            (x, y),
         )
         if selected:
             selected_key = self.overlay.keyboard.by_id(selected)
@@ -154,7 +155,7 @@ class GazetypeController:
         if not present:
             self.landing.reset()
             self.blink.reset()
-            self.overlay.set_gaze_state(None, 0.0, 0.0)
+            self.overlay.set_gaze_state(None, 0.0, 0.0, None)
 
     def on_camera_error(self, message: str) -> None:
         self.calibration_window.hide()

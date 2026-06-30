@@ -25,10 +25,10 @@ from gazetype.windows import make_window_non_activating
 
 
 COLORS = {
-    "background": QColor(10, 14, 23, 225),
-    "key": QColor(32, 40, 55, 242),
-    "key_border": QColor(105, 124, 153),
-    "active": QColor(44, 201, 151),
+    "background": QColor(10, 14, 23, 118),
+    "key": QColor(32, 40, 55, 150),
+    "key_border": QColor(135, 153, 181, 190),
+    "active": QColor(44, 201, 151, 235),
     "text": QColor(246, 248, 252),
     "muted": QColor(174, 186, 204),
     "danger": QColor(239, 91, 91),
@@ -348,6 +348,7 @@ class KeyboardOverlay(QWidget):
         self.progress = 0.0
         self.face_present = True
         self.fps = 0.0
+        self.gaze_position: tuple[float, float] | None = None
 
     def configure(self, screen, layout: KeyboardLayout) -> None:
         self.keyboard = KeyboardGeometry(layout)
@@ -357,17 +358,23 @@ class KeyboardOverlay(QWidget):
         self.show()
         make_window_non_activating(int(self.winId()), click_through=True)
 
-    def set_gaze_state(self, key_id: str | None, progress: float, fps: float) -> None:
+    def set_gaze_state(
+        self,
+        key_id: str | None,
+        progress: float,
+        fps: float,
+        gaze_position: tuple[float, float] | None,
+    ) -> None:
         self.active_key = key_id
         self.progress = progress
         self.fps = fps
+        self.gaze_position = gaze_position
         self.update()
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        keyboard_top = int(self.keyboard.top * self.height()) - 18
-        painter.fillRect(QRect(0, keyboard_top, self.width(), self.height() - keyboard_top), COLORS["background"])
+        painter.fillRect(self.rect(), COLORS["background"])
         for key in self.keyboard.keys:
             rect = QRectF(
                 key.x * self.width(), key.y * self.height(), key.width * self.width(), key.height * self.height()
@@ -386,10 +393,22 @@ class KeyboardOverlay(QWidget):
             font_size = max(12, min(24, int(rect.height() * 0.32)))
             painter.setFont(_ui_font(font_size, QFont.Weight.DemiBold))
             painter.drawText(rect, Qt.AlignCenter, key.label.upper() if len(key.label) == 1 else key.label)
+        if self.gaze_position is not None and self.face_present:
+            gaze_center = QPointF(
+                self.gaze_position[0] * self.width(),
+                self.gaze_position[1] * self.height(),
+            )
+            painter.setBrush(QColor(44, 201, 151, 82))
+            painter.setPen(QPen(QColor(106, 255, 207, 225), 3))
+            painter.drawEllipse(gaze_center, 26, 26)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(236, 255, 249, 235))
+            painter.drawEllipse(gaze_center, 4, 4)
+
         painter.setPen(COLORS["muted"] if self.face_present else COLORS["danger"])
         status = f"Kamera {self.fps:.0f} FPS" if self.face_present else "Yüz algılanamadı — yazma duraklatıldı"
         painter.setFont(_ui_font(13))
-        painter.drawText(QRectF(16, keyboard_top, 400, 18), Qt.AlignVCenter, status)
+        painter.drawText(QRectF(12, 4, 400, 20), Qt.AlignVCenter, status)
 
     @staticmethod
     def _rounded_path(rect: QRectF):
