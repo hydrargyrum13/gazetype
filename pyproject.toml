@@ -36,5 +36,4 @@ gazetype = ["assets/*.task"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
-
+addopts = "-q --basetemp=.pytest_tmp"
