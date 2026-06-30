@@ -6,17 +6,32 @@ from typing import Iterable
 import numpy as np
 
 
-CALIBRATION_TARGETS: tuple[tuple[float, float], ...] = (
-    (0.08, 0.08), (0.50, 0.08), (0.92, 0.08),
-    (0.08, 0.50), (0.50, 0.50), (0.92, 0.50),
-    (0.08, 0.92), (0.50, 0.92), (0.92, 0.92),
+CALIBRATION_MODEL_VERSION = 2
+CALIBRATION_GRID = (0.06, 0.28, 0.50, 0.72, 0.94)
+CALIBRATION_TARGETS: tuple[tuple[float, float], ...] = tuple(
+    (x, y)
+    for row_index, y in enumerate(CALIBRATION_GRID)
+    for x in (CALIBRATION_GRID if row_index % 2 == 0 else tuple(reversed(CALIBRATION_GRID)))
 )
+BASIS_SIZE = 12
+MINIMUM_CALIBRATION_POINTS = 20
 
 
 def _basis(features: np.ndarray) -> np.ndarray:
     gx, gy, head_x, head_y = features.T
     return np.column_stack((
-        np.ones(len(features)), gx, gy, gx * gx, gx * gy, gy * gy, head_x, head_y
+        np.ones(len(features)),
+        gx,
+        gy,
+        gx * gx,
+        gx * gy,
+        gy * gy,
+        gx * gx * gx,
+        gx * gx * gy,
+        gx * gy * gy,
+        gy * gy * gy,
+        head_x,
+        head_y,
     ))
 
 
@@ -35,8 +50,10 @@ class CalibrationModel:
         target_array = np.asarray(tuple(targets), dtype=np.float64)
         if feature_array.ndim != 2 or feature_array.shape[1] != 4:
             raise ValueError("Calibration requires four gaze features per sample")
-        if len(feature_array) < 8 or target_array.shape != (len(feature_array), 2):
-            raise ValueError("Calibration requires at least eight paired samples")
+        if len(feature_array) < MINIMUM_CALIBRATION_POINTS or target_array.shape != (len(feature_array), 2):
+            raise ValueError(
+                f"Calibration requires at least {MINIMUM_CALIBRATION_POINTS} paired samples"
+            )
         design = _basis(feature_array)
         regularizer = ridge * np.eye(design.shape[1])
         regularizer[0, 0] = 0.0
@@ -52,13 +69,21 @@ class CalibrationModel:
         result = design @ coefficients
         return float(np.clip(result[0], 0.0, 1.0)), float(np.clip(result[1], 0.0, 1.0))
 
-    def to_dict(self) -> dict[str, list[list[float]]]:
-        return {"coefficients": [list(axis) for axis in self.coefficients]}
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model_version": CALIBRATION_MODEL_VERSION,
+            "coefficients": [list(axis) for axis in self.coefficients],
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "CalibrationModel":
+        if data.get("model_version") != CALIBRATION_MODEL_VERSION:
+            raise ValueError("Calibration model is outdated")
         values = data["coefficients"]
-        if not isinstance(values, list) or len(values) != 2:
+        if (
+            not isinstance(values, list)
+            or len(values) != 2
+            or any(not isinstance(axis, list) or len(axis) != BASIS_SIZE for axis in values)
+        ):
             raise ValueError("Invalid calibration coefficients")
         return cls(tuple(tuple(float(value) for value in axis) for axis in values))  # type: ignore[arg-type]
-

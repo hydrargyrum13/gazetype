@@ -155,7 +155,7 @@ class SettingsWindow(QMainWindow):
 
         self.status = QLabel("Hazır")
         self.status.setWordWrap(True)
-        self.start_button = QPushButton("9 Noktalı Kalibrasyonu Başlat")
+        self.start_button = QPushButton("25 Noktalı Kalibrasyonu Başlat")
         self.start_button.setMinimumHeight(44)
         self.start_button.clicked.connect(self._emit_start)
         layout.addWidget(self.status)
@@ -285,10 +285,10 @@ class CalibrationWindow(QWidget):
         if self._target_started_ms is None:
             self._target_started_ms = timestamp_ms
             return
-        if timestamp_ms - self._target_started_ms < 260:
+        if timestamp_ms - self._target_started_ms < 200:
             return
         self._samples.append(features)
-        if len(self._samples) < 12:
+        if len(self._samples) < 10:
             self.update()
             return
         median = tuple(float(value) for value in np.median(np.asarray(self._samples), axis=0))
@@ -311,7 +311,7 @@ class CalibrationWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.fillRect(self.rect(), QColor(10, 14, 23))
-        target = CALIBRATION_TARGETS[min(self._target_index, 8)]
+        target = CALIBRATION_TARGETS[min(self._target_index, len(CALIBRATION_TARGETS) - 1)]
         point = QPointF(target[0] * self.width(), target[1] * self.height())
         painter.setPen(Qt.NoPen)
         painter.setBrush(COLORS["active"] if self._face_present else COLORS["danger"])
@@ -323,7 +323,7 @@ class CalibrationWindow(QWidget):
         painter.drawText(
             QRectF(0, self.height() * 0.43, self.width(), 50),
             Qt.AlignCenter,
-            f"Noktaya bakın  •  {self._target_index + 1}/9",
+            f"Noktaya bakın  •  {self._target_index + 1}/{len(CALIBRATION_TARGETS)}",
         )
         painter.setPen(COLORS["muted"])
         painter.setFont(_ui_font(16))
