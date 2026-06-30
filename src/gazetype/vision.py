@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QImage
 
 from gazetype.models import VisionFrame
 
@@ -57,6 +58,7 @@ def extract_gaze_features(landmarks: object) -> tuple[float, float, float, float
 
 class CameraWorker(QThread):
     frame_ready = Signal(object)
+    tracking_preview = Signal(object)
     face_presence = Signal(bool)
     error = Signal(str)
 
@@ -115,6 +117,39 @@ class CameraWorker(QThread):
                     instantaneous_fps = 1.0 / max(now - previous_time, 1e-6)
                     smoothed_fps = 0.9 * smoothed_fps + 0.1 * instantaneous_fps
                     previous_time = now
+                    if present:
+                        points = result.face_landmarks[0]
+                        height, width = image.shape[:2]
+                        eye_color = (151, 201, 44)
+                        for contour in (
+                            (33, 160, 158, 133, 153, 144),
+                            (362, 385, 387, 263, 373, 380),
+                        ):
+                            polygon = np.asarray([
+                                (int(points[index].x * width), int(points[index].y * height))
+                                for index in contour
+                            ], dtype=np.int32)
+                            cv2.polylines(image, [polygon], True, eye_color, 2, cv2.LINE_AA)
+                        for iris_range in (range(468, 473), range(473, 478)):
+                            iris_x = int(np.mean([points[index].x for index in iris_range]) * width)
+                            iris_y = int(np.mean([points[index].y for index in iris_range]) * height)
+                            cv2.circle(image, (iris_x, iris_y), 6, (255, 255, 255), 2, cv2.LINE_AA)
+                            cv2.circle(image, (iris_x, iris_y), 2, eye_color, -1, cv2.LINE_AA)
+                        xs = [point.x for point in points[:468]]
+                        ys = [point.y for point in points[:468]]
+                        top_left = (int(min(xs) * width), int(min(ys) * height))
+                        bottom_right = (int(max(xs) * width), int(max(ys) * height))
+                        cv2.rectangle(image, top_left, bottom_right, (151, 201, 44), 1, cv2.LINE_AA)
+                    rgb_preview = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                    height, width, channels = rgb_preview.shape
+                    preview = QImage(
+                        rgb_preview.data,
+                        width,
+                        height,
+                        channels * width,
+                        QImage.Format.Format_RGB888,
+                    ).copy()
+                    self.tracking_preview.emit(preview)
                     if not present:
                         continue
                     features = extract_gaze_features(result.face_landmarks[0])
@@ -132,4 +167,3 @@ class CameraWorker(QThread):
             capture.release()
         except Exception as exc:  # errors must reach the GUI instead of killing the worker silently
             self.error.emit(str(exc))
-

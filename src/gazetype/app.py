@@ -12,7 +12,14 @@ from gazetype.input_windows import WindowsInputSender
 from gazetype.landing import LandingDetector
 from gazetype.models import GazePoint, KeyboardLayout, SENSITIVITY_PROFILES, Sensitivity, VisionFrame
 from gazetype.settings import AppSettings, SettingsStore
-from gazetype.ui import CalibrationWindow, KeyboardOverlay, SettingsWindow, ToggleWindow, show_error
+from gazetype.ui import (
+    CalibrationWindow,
+    KeyboardOverlay,
+    SettingsWindow,
+    ToggleWindow,
+    TrackingWindow,
+    show_error,
+)
 from gazetype.vision import CameraWorker
 
 
@@ -25,6 +32,7 @@ class GazetypeController:
         self.calibration_window = CalibrationWindow()
         self.overlay = KeyboardOverlay()
         self.toggle = ToggleWindow()
+        self.tracking_window = TrackingWindow()
         self.worker: CameraWorker | None = None
         self.input_sender = WindowsInputSender()
         self.landing = LandingDetector(SENSITIVITY_PROFILES[self.settings.sensitivity])
@@ -89,9 +97,11 @@ class GazetypeController:
         self._stop_worker()
         self.worker = CameraWorker(self.settings.camera_index)
         self.worker.frame_ready.connect(self.on_vision_frame)
+        self.worker.tracking_preview.connect(self.tracking_window.set_frame)
         self.worker.face_presence.connect(self.on_face_presence)
         self.worker.error.connect(self.on_camera_error)
         self.worker.start()
+        self.tracking_window.show()
         self.settings_window.showMinimized()
         self.calibration_window.begin(
             self.screen, calibration_targets(self.settings.calibration_point_count)
@@ -119,6 +129,7 @@ class GazetypeController:
 
     def cancel_calibration(self) -> None:
         self._stop_worker()
+        self.tracking_window.hide()
         self.settings_window.unlock()
         self.settings_window.set_status("Kalibrasyon iptal edildi.")
         self.settings_window.show()
@@ -168,6 +179,7 @@ class GazetypeController:
 
     def on_camera_error(self, message: str) -> None:
         self.calibration_window.hide()
+        self.tracking_window.hide()
         self.settings_window.unlock()
         self.settings_window.set_status(message, True)
         self.settings_window.show()
@@ -190,6 +202,7 @@ class GazetypeController:
         self.keyboard_enabled = False
         self.overlay.hide()
         self.toggle.hide()
+        self.tracking_window.hide()
         self._stop_worker()
         self.settings_window.unlock()
         self.settings_window.show()
@@ -206,6 +219,7 @@ class GazetypeController:
     def shutdown(self) -> None:
         self.settings_window.stop_camera_previews()
         self._stop_worker()
+        self.tracking_window.close()
         self.tray.hide()
         self.application.quit()
 

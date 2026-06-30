@@ -348,6 +348,29 @@ class CalibrationWindow(QWidget):
         painter.drawText(QRectF(0, self.height() * 0.49, self.width(), 40), Qt.AlignCenter, message)
 
 
+class TrackingWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Gazetype — Yüz ve Göz Takibi")
+        self.setMinimumSize(480, 390)
+        layout = QVBoxLayout(self)
+        title = QLabel("Canlı yüz ve göz takibi")
+        title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        self.preview = QLabel("Kamera görüntüsü bekleniyor…")
+        self.preview.setAlignment(Qt.AlignCenter)
+        self.preview.setMinimumSize(448, 336)
+        self.preview.setStyleSheet("background: #080b11; color: #aebacc;")
+        layout.addWidget(title)
+        layout.addWidget(self.preview, 1)
+        self.setStyleSheet("QWidget { background: #111722; color: #f6f8fc; }")
+
+    def set_frame(self, image: QImage) -> None:
+        self.preview.setPixmap(QPixmap.fromImage(image).scaled(
+            self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        ))
+        self.preview.setText("")
+
+
 class KeyboardOverlay(QWidget):
     def __init__(self):
         super().__init__()

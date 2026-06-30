@@ -2,10 +2,11 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
 from gazetype.settings import AppSettings
-from gazetype.ui import KeyboardOverlay, SettingsWindow
+from gazetype.ui import KeyboardOverlay, SettingsWindow, TrackingWindow
 
 
 def test_camera_preview_cards_select_camera() -> None:
@@ -29,4 +30,15 @@ def test_overlay_tracks_visible_gaze_position() -> None:
     assert overlay.gaze_position == (0.25, 0.75)
     assert overlay.keyboard.top == 0.03
     overlay.close()
+    assert application is not None
+
+
+def test_tracking_window_displays_camera_frame() -> None:
+    application = QApplication.instance() or QApplication([])
+    window = TrackingWindow()
+    image = QImage(640, 480, QImage.Format.Format_RGB888)
+    image.fill(QColor("black"))
+    window.set_frame(image)
+    assert window.preview.pixmap() is not None
+    window.close()
     assert application is not None
