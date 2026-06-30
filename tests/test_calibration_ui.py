@@ -3,6 +3,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 
 from gazetype.calibration import CALIBRATION_TARGETS
 from gazetype.ui import CalibrationWindow
@@ -22,6 +24,7 @@ def test_calibration_window_collects_all_twenty_five_points() -> None:
         window.add_sample(timestamp, features)
         for sample_index in range(10):
             window.add_sample(timestamp + 201 + sample_index * 33, features)
+        QTest.mouseClick(window, Qt.LeftButton)
         timestamp += 600
 
     assert len(completed) == 1
@@ -30,4 +33,3 @@ def test_calibration_window_collects_all_twenty_five_points() -> None:
     assert targets == CALIBRATION_TARGETS
     assert not window.isVisible()
     assert application is not None
-

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import sys
+from collections import deque
 
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from gazetype.blink import DeliberateBlinkDetector
-from gazetype.calibration import CalibrationModel
+from gazetype.calibration import CalibrationModel, calibration_targets
 from gazetype.input_windows import WindowsInputSender
 from gazetype.landing import LandingDetector
 from gazetype.models import GazePoint, KeyboardLayout, SENSITIVITY_PROFILES, Sensitivity, VisionFrame
@@ -31,6 +32,7 @@ class GazetypeController:
         self.keyboard_enabled = False
         self.face_present = False
         self.screen = None
+        self.recent_gaze: deque[tuple[float, float]] = deque(maxlen=3)
 
         self.settings_window.start_requested.connect(self.begin_calibration)
         self.calibration_window.completed.connect(self.finish_calibration)
@@ -82,6 +84,7 @@ class GazetypeController:
             screen_geometry=str(values["screen_geometry"]),
             layout=KeyboardLayout(str(values["layout"])),
             sensitivity=Sensitivity(str(values["sensitivity"])),
+            calibration_point_count=int(values["calibration_point_count"]),
         )
         self._stop_worker()
         self.worker = CameraWorker(self.settings.camera_index)
@@ -89,8 +92,10 @@ class GazetypeController:
         self.worker.face_presence.connect(self.on_face_presence)
         self.worker.error.connect(self.on_camera_error)
         self.worker.start()
-        self.settings_window.hide()
-        self.calibration_window.begin(self.screen)
+        self.settings_window.showMinimized()
+        self.calibration_window.begin(
+            self.screen, calibration_targets(self.settings.calibration_point_count)
+        )
 
     def finish_calibration(self, features, targets) -> None:
         try:
@@ -126,6 +131,9 @@ class GazetypeController:
         if model is None or self.screen is None:
             return
         x, y = model.predict(frame.features)
+        self.recent_gaze.append((x, y))
+        x = sum(point[0] for point in self.recent_gaze) / len(self.recent_gaze)
+        y = sum(point[1] for point in self.recent_gaze) / len(self.recent_gaze)
         toggle_armed = x >= 0.87 and y <= 0.15
         eyes_closed = frame.blink_left >= self.blink.close_threshold and frame.blink_right >= self.blink.close_threshold
         if eyes_closed:
@@ -153,6 +161,7 @@ class GazetypeController:
         self.calibration_window.set_face_present(present)
         self.overlay.face_present = present
         if not present:
+            self.recent_gaze.clear()
             self.landing.reset()
             self.blink.reset()
             self.overlay.set_gaze_state(None, 0.0, 0.0, None)
@@ -169,6 +178,7 @@ class GazetypeController:
             return
         self.keyboard_enabled = not self.keyboard_enabled
         self.landing.reset()
+        self.recent_gaze.clear()
         self.blink.reset()
         self.toggle.set_enabled(self.keyboard_enabled)
         if self.keyboard_enabled:

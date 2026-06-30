@@ -5,7 +5,12 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from gazetype.calibration import CalibrationModel
+from gazetype.calibration import (
+    DEFAULT_CALIBRATION_POINT_COUNT,
+    MAXIMUM_CALIBRATION_POINTS,
+    MINIMUM_CALIBRATION_POINTS,
+    CalibrationModel,
+)
 from gazetype.models import KeyboardLayout, Sensitivity
 
 
@@ -16,6 +21,7 @@ class AppSettings:
     screen_geometry: str = ""
     layout: KeyboardLayout = KeyboardLayout.TURKISH_Q
     sensitivity: Sensitivity = Sensitivity.FAST
+    calibration_point_count: int = DEFAULT_CALIBRATION_POINT_COUNT
     calibration: CalibrationModel | None = None
 
     def __post_init__(self) -> None:
@@ -25,6 +31,10 @@ class AppSettings:
             self.layout = KeyboardLayout(str(self.layout))
         if not isinstance(self.sensitivity, Sensitivity):
             self.sensitivity = Sensitivity(str(self.sensitivity))
+        self.calibration_point_count = max(
+            MINIMUM_CALIBRATION_POINTS,
+            min(int(self.calibration_point_count), MAXIMUM_CALIBRATION_POINTS),
+        )
 
     def to_dict(self) -> dict[str, object]:
         data = asdict(self)
@@ -42,6 +52,9 @@ class AppSettings:
             screen_geometry=str(data.get("screen_geometry", "")),
             layout=KeyboardLayout(str(data.get("layout", KeyboardLayout.TURKISH_Q.value))),
             sensitivity=Sensitivity(str(data.get("sensitivity", Sensitivity.FAST.value))),
+            calibration_point_count=int(
+                data.get("calibration_point_count", DEFAULT_CALIBRATION_POINT_COUNT)
+            ),
             calibration=(
                 CalibrationModel.from_dict(calibration_data)
                 if isinstance(calibration_data, dict)

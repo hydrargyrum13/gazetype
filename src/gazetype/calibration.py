@@ -7,14 +7,27 @@ import numpy as np
 
 
 CALIBRATION_MODEL_VERSION = 2
-CALIBRATION_GRID = (0.06, 0.28, 0.50, 0.72, 0.94)
-CALIBRATION_TARGETS: tuple[tuple[float, float], ...] = tuple(
-    (x, y)
-    for row_index, y in enumerate(CALIBRATION_GRID)
-    for x in (CALIBRATION_GRID if row_index % 2 == 0 else tuple(reversed(CALIBRATION_GRID)))
-)
-BASIS_SIZE = 12
+DEFAULT_CALIBRATION_POINT_COUNT = 25
 MINIMUM_CALIBRATION_POINTS = 20
+MAXIMUM_CALIBRATION_POINTS = 49
+
+
+def calibration_targets(count: int) -> tuple[tuple[float, float], ...]:
+    if not MINIMUM_CALIBRATION_POINTS <= count <= MAXIMUM_CALIBRATION_POINTS:
+        raise ValueError("Calibration point count must be between 20 and 49")
+    columns = int(np.ceil(np.sqrt(count)))
+    rows = int(np.ceil(count / columns))
+    xs = np.linspace(0.06, 0.94, columns)
+    ys = np.linspace(0.06, 0.94, rows)
+    targets: list[tuple[float, float]] = []
+    for row_index, y in enumerate(ys):
+        row_xs = xs if row_index % 2 == 0 else xs[::-1]
+        targets.extend((float(x), float(y)) for x in row_xs)
+    return tuple(targets[:count])
+
+
+CALIBRATION_TARGETS = calibration_targets(DEFAULT_CALIBRATION_POINT_COUNT)
+BASIS_SIZE = 12
 
 
 def _basis(features: np.ndarray) -> np.ndarray:

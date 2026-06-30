@@ -1,6 +1,6 @@
 import numpy as np
 
-from gazetype.calibration import CALIBRATION_TARGETS, CalibrationModel
+from gazetype.calibration import CALIBRATION_TARGETS, CalibrationModel, calibration_targets
 
 
 def test_calibration_round_trip() -> None:
@@ -15,8 +15,14 @@ def test_calibration_round_trip() -> None:
 def test_calibration_uses_twenty_five_point_snake_grid() -> None:
     assert len(CALIBRATION_TARGETS) == 25
     assert len(set(CALIBRATION_TARGETS)) == 25
-    assert CALIBRATION_TARGETS[:5] == tuple((x, 0.06) for x in (0.06, 0.28, 0.50, 0.72, 0.94))
-    assert CALIBRATION_TARGETS[5:10] == tuple((x, 0.28) for x in (0.94, 0.72, 0.50, 0.28, 0.06))
+    assert np.allclose(CALIBRATION_TARGETS[:5], tuple((x, 0.06) for x in (0.06, 0.28, 0.50, 0.72, 0.94)))
+    assert np.allclose(CALIBRATION_TARGETS[5:10], tuple((x, 0.28) for x in (0.94, 0.72, 0.50, 0.28, 0.06)))
+
+
+def test_calibration_target_count_is_configurable() -> None:
+    assert len(calibration_targets(20)) == 20
+    assert len(calibration_targets(37)) == 37
+    assert len(set(calibration_targets(49))) == 49
 
 
 def test_calibration_rejects_too_few_samples() -> None:

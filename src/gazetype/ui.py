@@ -12,11 +12,16 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from gazetype.calibration import CALIBRATION_TARGETS
+from gazetype.calibration import (
+    CALIBRATION_TARGETS,
+    MAXIMUM_CALIBRATION_POINTS,
+    MINIMUM_CALIBRATION_POINTS,
+)
 from gazetype.camera_preview import CameraPreviewWorker
 from gazetype.keyboards import KeyboardGeometry
 from gazetype.models import KeyboardLayout, Sensitivity
@@ -148,14 +153,19 @@ class SettingsWindow(QMainWindow):
         ):
             self.sensitivity_combo.addItem(label, value)
         self.sensitivity_combo.setCurrentIndex(list(Sensitivity).index(settings.sensitivity))
+        self.point_count = QSpinBox()
+        self.point_count.setRange(MINIMUM_CALIBRATION_POINTS, MAXIMUM_CALIBRATION_POINTS)
+        self.point_count.setValue(settings.calibration_point_count)
+        self.point_count.setSuffix(" nokta")
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
+        form.addRow("Kalibrasyon", self.point_count)
         layout.addLayout(form)
 
         self.status = QLabel("Hazır")
         self.status.setWordWrap(True)
-        self.start_button = QPushButton("25 Noktalı Kalibrasyonu Başlat")
+        self.start_button = QPushButton("Kalibrasyonu Başlat")
         self.start_button.setMinimumHeight(44)
         self.start_button.clicked.connect(self._emit_start)
         layout.addWidget(self.status)
@@ -173,6 +183,10 @@ class SettingsWindow(QMainWindow):
     def hideEvent(self, event) -> None:
         self.stop_camera_previews()
         super().hideEvent(event)
+
+    def closeEvent(self, event) -> None:
+        event.ignore()
+        self.showMinimized()
 
     def start_camera_previews(self) -> None:
         if self.preview_workers:
@@ -237,6 +251,7 @@ class SettingsWindow(QMainWindow):
             "screen_index": screen_index,
             "layout": self.layout_combo.currentData(),
             "sensitivity": self.sensitivity_combo.currentData(),
+            "calibration_point_count": self.point_count.value(),
         })
 
     def set_status(self, message: str, error: bool = False) -> None:
@@ -261,9 +276,11 @@ class CalibrationWindow(QWidget):
         self._samples: list[tuple[float, float, float, float]] = []
         self._collected: list[tuple[float, float, float, float]] = []
         self._face_present = False
+        self._targets = CALIBRATION_TARGETS
 
-    def begin(self, screen) -> None:
+    def begin(self, screen, targets=CALIBRATION_TARGETS) -> None:
         self.setGeometry(screen.geometry())
+        self._targets = tuple(targets)
         self._target_index = 0
         self._target_started_ms = None
         self._samples.clear()
@@ -282,23 +299,22 @@ class CalibrationWindow(QWidget):
     def add_sample(self, timestamp_ms: int, features: tuple[float, float, float, float]) -> None:
         if not self.isVisible() or not self._face_present:
             return
-        if self._target_started_ms is None:
-            self._target_started_ms = timestamp_ms
-            return
-        if timestamp_ms - self._target_started_ms < 200:
-            return
+        self._target_started_ms = timestamp_ms
         self._samples.append(features)
-        if len(self._samples) < 10:
-            self.update()
+        if len(self._samples) > 12:
+            self._samples.pop(0)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() != Qt.LeftButton or not self._face_present or not self._samples:
             return
         median = tuple(float(value) for value in np.median(np.asarray(self._samples), axis=0))
         self._collected.append(median)
         self._samples.clear()
         self._target_started_ms = None
         self._target_index += 1
-        if self._target_index >= len(CALIBRATION_TARGETS):
+        if self._target_index >= len(self._targets):
             self.hide()
-            self.completed.emit(tuple(self._collected), CALIBRATION_TARGETS)
+            self.completed.emit(tuple(self._collected), self._targets)
         else:
             self.update()
 
@@ -311,7 +327,7 @@ class CalibrationWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.fillRect(self.rect(), QColor(10, 14, 23))
-        target = CALIBRATION_TARGETS[min(self._target_index, len(CALIBRATION_TARGETS) - 1)]
+        target = self._targets[min(self._target_index, len(self._targets) - 1)]
         point = QPointF(target[0] * self.width(), target[1] * self.height())
         painter.setPen(Qt.NoPen)
         painter.setBrush(COLORS["active"] if self._face_present else COLORS["danger"])
@@ -323,7 +339,8 @@ class CalibrationWindow(QWidget):
         painter.drawText(
             QRectF(0, self.height() * 0.43, self.width(), 50),
             Qt.AlignCenter,
-            f"Noktaya bakın  •  {self._target_index + 1}/{len(CALIBRATION_TARGETS)}",
+            f"Noktaya bakın ve herhangi bir yere tıklayın  •  "
+            f"{self._target_index + 1}/{len(self._targets)}",
         )
         painter.setPen(COLORS["muted"])
         painter.setFont(_ui_font(16))
