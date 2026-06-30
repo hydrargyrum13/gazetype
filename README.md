@@ -17,6 +17,29 @@ uygulamasıdır.
 - Bilinçli göz kırpma veya fare ile açma/kapatma
 - Tamamen cihaz üzerinde kamera işleme
 
+## Kullanım
+
+1. Gazetype'i başlatın.
+2. Kamera, hedef ekran, klavye düzeni ve hassasiyeti seçin.
+3. Kalibrasyonda sırayla gösterilen dokuz noktaya bakın.
+4. Kalibrasyon bitince yazmak istediğiniz uygulamayı (örneğin Not Defteri)
+   odaklayın.
+5. Ekranın sağ üstündeki düğmeye bakıp 250–800 ms boyunca bilinçli olarak
+   iki gözünüzü kırpın. Düğmeye fareyle de tıklayabilirsiniz.
+6. Harfler arasında gözünüzü hızla hareket ettirin. Yalnızca gözün indiği ve
+   doğrulanan tuş yazılır; hareket hattındaki tuşlar yok sayılır.
+
+Sistem tepsisi menüsünden yeniden kalibrasyon yapılabilir veya uygulama
+kapatılabilir.
+
+### Hassasiyet seviyeleri
+
+- **Hızlı:** 2 doğrulama karesi ve en az 50 ms
+- **Dengeli:** 3 doğrulama karesi ve en az 90 ms
+- **Sabit:** 4 doğrulama karesi ve en az 130 ms
+
+Düşük kare hızlı kameralarda gereken gerçek süre uzayabilir.
+
 ## Geliştirme
 
 Python 3.12 gereklidir.
@@ -51,7 +74,13 @@ Kamera kareleri yalnızca bellekte işlenir; kaydedilmez veya ağ üzerinden
 gönderilmez. Ayarlar ve kalibrasyon verileri kullanıcının yerel uygulama veri
 klasöründe tutulur.
 
+## Sınırlamalar
+
+- İlk sürüm yalnızca Windows 10/11 x64 içindir.
+- Yönetici olarak çalışan bir uygulamaya, normal yetkideki Gazetype tuş
+  gönderemeyebilir.
+- Kelime tahmini, fare kontrolü ve klinik doğruluk iddiası yoktur.
+
 ## Lisans
 
 MIT
-
