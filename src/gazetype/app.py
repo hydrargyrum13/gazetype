@@ -193,6 +193,7 @@ class GazetypeController:
             self.worker = None
 
     def shutdown(self) -> None:
+        self.settings_window.stop_camera_previews()
         self._stop_worker()
         self.tray.hide()
         self.application.quit()
@@ -210,4 +211,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

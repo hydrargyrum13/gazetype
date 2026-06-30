@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
-
 import numpy as np
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -19,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from gazetype.calibration import CALIBRATION_TARGETS
+from gazetype.camera_preview import CameraPreviewWorker
 from gazetype.keyboards import KeyboardGeometry
 from gazetype.models import KeyboardLayout, Sensitivity
 from gazetype.settings import AppSettings
@@ -36,13 +35,68 @@ COLORS = {
 }
 
 
+class CameraPreviewCard(QPushButton):
+    selected = Signal(int)
+
+    def __init__(self, camera_index: int):
+        super().__init__()
+        self.camera_index = camera_index
+        self.setCheckable(True)
+        self.setMinimumSize(188, 142)
+        self.setCursor(Qt.PointingHandCursor)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        self.preview = QLabel("Kamera aranıyor…")
+        self.preview.setAlignment(Qt.AlignCenter)
+        self.preview.setMinimumSize(170, 96)
+        self.preview.setStyleSheet("background: #080b11; color: #aebacc; border-radius: 5px;")
+        self.caption = QLabel(f"Kamera {camera_index + 1}")
+        self.caption.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.preview, 1)
+        layout.addWidget(self.caption)
+        self.clicked.connect(lambda: self.selected.emit(self.camera_index))
+        self.set_available(None)
+
+    def set_frame(self, image: QImage) -> None:
+        pixmap = QPixmap.fromImage(image).scaled(
+            self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self.preview.setPixmap(pixmap)
+        self.preview.setText("")
+
+    def set_available(self, available: bool | None) -> None:
+        if available is None:
+            self.caption.setText(f"Kamera {self.camera_index + 1} · aranıyor")
+            self.setEnabled(True)
+        elif available:
+            self.caption.setText(f"Kamera {self.camera_index + 1} · hazır")
+            self.setEnabled(True)
+        else:
+            self.preview.clear()
+            self.preview.setText("Kullanılamıyor")
+            self.caption.setText(f"Kamera {self.camera_index + 1} · bulunamadı")
+            self.setEnabled(False)
+        self._refresh_style()
+
+    def set_selected(self, selected: bool) -> None:
+        self.setChecked(selected)
+        self._refresh_style()
+
+    def _refresh_style(self) -> None:
+        border = "#2cc997" if self.isChecked() else "#526078"
+        self.setStyleSheet(
+            f"CameraPreviewCard {{ background: #202837; border: 3px solid {border}; border-radius: 9px; }}"
+            "CameraPreviewCard:hover { border-color: #2cc997; }"
+        )
+
+
 class SettingsWindow(QMainWindow):
     start_requested = Signal(object)
 
     def __init__(self, settings: AppSettings):
         super().__init__()
         self.setWindowTitle("Gazetype")
-        self.setMinimumWidth(440)
+        self.setMinimumSize(520, 620)
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -53,11 +107,25 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(subtitle)
 
-        form = QFormLayout()
-        self.camera_combo = QComboBox()
+        camera_title = QLabel("Kamera önizlemeleri")
+        camera_title.setStyleSheet("font-weight: 700; margin-top: 8px;")
+        layout.addWidget(camera_title)
+        camera_grid = QGridLayout()
+        camera_grid.setSpacing(8)
+        self.selected_camera_index = max(0, min(settings.camera_index, 3))
+        self.camera_cards: dict[int, CameraPreviewCard] = {}
+        self.camera_availability: dict[int, bool | None] = {}
+        self.preview_workers: dict[int, CameraPreviewWorker] = {}
         for index in range(4):
-            self.camera_combo.addItem(f"Kamera {index + 1}", index)
-        self.camera_combo.setCurrentIndex(max(0, min(settings.camera_index, 3)))
+            card = CameraPreviewCard(index)
+            card.selected.connect(self.select_camera)
+            card.set_selected(index == self.selected_camera_index)
+            self.camera_cards[index] = card
+            self.camera_availability[index] = None
+            camera_grid.addWidget(card, index // 2, index % 2)
+        layout.addLayout(camera_grid)
+
+        form = QFormLayout()
 
         self.screen_combo = QComboBox()
         self.layout_combo = QComboBox()
@@ -73,7 +141,6 @@ class SettingsWindow(QMainWindow):
         ):
             self.sensitivity_combo.addItem(label, value)
         self.sensitivity_combo.setCurrentIndex(list(Sensitivity).index(settings.sensitivity))
-        form.addRow("Kamera", self.camera_combo)
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
@@ -92,6 +159,56 @@ class SettingsWindow(QMainWindow):
             "QPushButton:hover { border-color: #2cc997; }"
         )
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.start_camera_previews()
+
+    def hideEvent(self, event) -> None:
+        self.stop_camera_previews()
+        super().hideEvent(event)
+
+    def start_camera_previews(self) -> None:
+        if self.preview_workers:
+            return
+        for index, card in self.camera_cards.items():
+            self.camera_availability[index] = None
+            card.set_available(None)
+            worker = CameraPreviewWorker(index, self)
+            worker.frame_ready.connect(self._set_camera_frame)
+            worker.availability_changed.connect(self._set_camera_availability)
+            self.preview_workers[index] = worker
+            worker.start()
+
+    def stop_camera_previews(self) -> None:
+        workers = tuple(self.preview_workers.values())
+        self.preview_workers.clear()
+        for worker in workers:
+            worker.stop()
+            worker.deleteLater()
+
+    def select_camera(self, camera_index: int) -> None:
+        self.selected_camera_index = camera_index
+        for index, card in self.camera_cards.items():
+            card.set_selected(index == camera_index)
+
+    def _set_camera_frame(self, camera_index: int, image: QImage) -> None:
+        card = self.camera_cards.get(camera_index)
+        if card:
+            card.set_frame(image)
+
+    def _set_camera_availability(self, camera_index: int, available: bool) -> None:
+        card = self.camera_cards.get(camera_index)
+        if not card:
+            return
+        self.camera_availability[camera_index] = available
+        card.set_available(available)
+        if not available and camera_index == self.selected_camera_index:
+            available_indices = [index for index, state in self.camera_availability.items() if state is True]
+            if available_indices:
+                self.select_camera(available_indices[0])
+        elif available and self.camera_availability.get(self.selected_camera_index) is False:
+            self.select_camera(camera_index)
+
     def set_screens(self, screens: list[tuple[str, str]], selected_name: str) -> None:
         self.screen_combo.clear()
         selected = 0
@@ -105,8 +222,9 @@ class SettingsWindow(QMainWindow):
         self.start_button.setEnabled(False)
         self.status.setText("Kamera başlatılıyor…")
         screen_name, geometry, screen_index = self.screen_combo.currentData()
+        self.stop_camera_previews()
         self.start_requested.emit({
-            "camera_index": self.camera_combo.currentData(),
+            "camera_index": self.selected_camera_index,
             "screen_name": screen_name,
             "screen_geometry": geometry,
             "screen_index": screen_index,
@@ -313,4 +431,3 @@ class ToggleWindow(QWidget):
 
 def show_error(parent: QWidget, title: str, message: str) -> None:
     QMessageBox.critical(parent, title, message)
-

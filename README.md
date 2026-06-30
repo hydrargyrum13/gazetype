@@ -10,6 +10,7 @@ uygulamasıdır.
 ## Özellikler
 
 - Türkçe Q ve İngilizce QWERTY ekran klavyeleri
+- Bağlı kameraları ayırt etmek için canlı kamera önizleme kartları
 - Çoklu ekran seçimi
 - Dokuz noktalı bakış kalibrasyonu
 - Hızlı göz sıçramasından sonraki iniş noktasını seçme
@@ -20,7 +21,8 @@ uygulamasıdır.
 ## Kullanım
 
 1. Gazetype'i başlatın.
-2. Kamera, hedef ekran, klavye düzeni ve hassasiyeti seçin.
+2. Canlı önizleme kartından kamerayı; ardından hedef ekranı, klavye düzenini
+   ve hassasiyeti seçin. Kullanılamayan kamera girişleri kart üzerinde belirtilir.
 3. Kalibrasyonda sırayla gösterilen dokuz noktaya bakın.
 4. Kalibrasyon bitince yazmak istediğiniz uygulamayı (örneğin Not Defteri)
    odaklayın.
