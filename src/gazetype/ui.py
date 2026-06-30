@@ -157,6 +157,13 @@ class SettingsWindow(QMainWindow):
         self.point_count.setRange(MINIMUM_CALIBRATION_POINTS, MAXIMUM_CALIBRATION_POINTS)
         self.point_count.setValue(settings.calibration_point_count)
         self.point_count.setSuffix(" nokta")
+        self.calibration_mode = QComboBox()
+        self.calibration_mode.addItem("Serbest ekran ızgarası", "grid")
+        self.calibration_mode.addItem("Klavye tuş merkezleri", "keyboard")
+        self.calibration_mode.setCurrentIndex(1 if settings.calibration_mode == "keyboard" else 0)
+        self.calibration_mode.currentIndexChanged.connect(
+            lambda: self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
+        )
         self.gaze_average_count = QSpinBox()
         self.gaze_average_count.setRange(1, 30)
         self.gaze_average_count.setValue(settings.gaze_average_count)
@@ -164,8 +171,10 @@ class SettingsWindow(QMainWindow):
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
-        form.addRow("Kalibrasyon", self.point_count)
+        form.addRow("Kalibrasyon modu", self.calibration_mode)
+        form.addRow("Izgara noktaları", self.point_count)
         form.addRow("Bakış ortalaması", self.gaze_average_count)
+        self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
         layout.addLayout(form)
 
         self.status = QLabel("Hazır")
@@ -257,6 +266,7 @@ class SettingsWindow(QMainWindow):
             "layout": self.layout_combo.currentData(),
             "sensitivity": self.sensitivity_combo.currentData(),
             "calibration_point_count": self.point_count.value(),
+            "calibration_mode": self.calibration_mode.currentData(),
             "gaze_average_count": self.gaze_average_count.value(),
         })
 
@@ -283,10 +293,12 @@ class CalibrationWindow(QWidget):
         self._collected: list[tuple[float, float, float, float]] = []
         self._face_present = False
         self._targets = CALIBRATION_TARGETS
+        self._keyboard: KeyboardGeometry | None = None
 
-    def begin(self, screen, targets=CALIBRATION_TARGETS) -> None:
+    def begin(self, screen, targets=CALIBRATION_TARGETS, keyboard=None) -> None:
         self.setGeometry(screen.geometry())
         self._targets = tuple(targets)
+        self._keyboard = keyboard
         self._target_index = 0
         self._target_started_ms = None
         self._samples.clear()
@@ -333,6 +345,18 @@ class CalibrationWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.fillRect(self.rect(), QColor(10, 14, 23))
+        if self._keyboard is not None:
+            for key in self._keyboard.keys:
+                rect = QRectF(
+                    key.x * self.width(), key.y * self.height(),
+                    key.width * self.width(), key.height * self.height(),
+                )
+                painter.setBrush(COLORS["key"])
+                painter.setPen(QPen(COLORS["key_border"], 1))
+                painter.drawRoundedRect(rect, 8, 8)
+                painter.setPen(COLORS["text"])
+                painter.setFont(_ui_font(max(12, min(24, int(rect.height() * 0.30))), QFont.Weight.DemiBold))
+                painter.drawText(rect, Qt.AlignCenter, key.label.upper() if len(key.label) == 1 else key.label)
         target = self._targets[min(self._target_index, len(self._targets) - 1)]
         point = QPointF(target[0] * self.width(), target[1] * self.height())
         painter.setPen(Qt.NoPen)
@@ -340,18 +364,21 @@ class CalibrationWindow(QWidget):
         painter.drawEllipse(point, 19, 19)
         painter.setBrush(QColor(255, 255, 255))
         painter.drawEllipse(point, 6, 6)
-        painter.setPen(COLORS["text"])
-        painter.setFont(_ui_font(24, QFont.Weight.Bold))
-        painter.drawText(
-            QRectF(0, self.height() * 0.43, self.width(), 50),
-            Qt.AlignCenter,
-            f"Noktaya bakın ve herhangi bir yere tıklayın  •  "
-            f"{self._target_index + 1}/{len(self._targets)}",
-        )
-        painter.setPen(COLORS["muted"])
-        painter.setFont(_ui_font(16))
-        message = "Yüz algılandı" if self._face_present else "Yüzünüzü kameraya gösterin"
-        painter.drawText(QRectF(0, self.height() * 0.49, self.width(), 40), Qt.AlignCenter, message)
+        if self._keyboard is None:
+            painter.setPen(COLORS["text"])
+            painter.setFont(_ui_font(24, QFont.Weight.Bold))
+            painter.drawText(
+                QRectF(0, self.height() * 0.43, self.width(), 50),
+                Qt.AlignCenter,
+                f"Noktaya bakın ve herhangi bir yere tıklayın  •  "
+                f"{self._target_index + 1}/{len(self._targets)}",
+            )
+            painter.setPen(COLORS["muted"])
+            painter.setFont(_ui_font(16))
+            message = "Yüz algılandı" if self._face_present else "Yüzünüzü kameraya gösterin"
+            painter.drawText(
+                QRectF(0, self.height() * 0.49, self.width(), 40), Qt.AlignCenter, message
+            )
 
 
 class TrackingWindow(QWidget):

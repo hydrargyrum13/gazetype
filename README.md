@@ -14,6 +14,7 @@ uygulamasıdır.
 - Bağlı kameraları ayırt etmek için canlı kamera önizleme kartları
 - Çoklu ekran seçimi
 - 20–49 arasında ayarlanabilen nokta sayısıyla hassas bakış kalibrasyonu
+- Seçili klavyedeki her tuş merkezini hedef alan alternatif kalibrasyon modu
 - Hızlı göz sıçramasından sonraki iniş noktasını seçme
 - Kamera parazitini azaltmak için 1–30 bakış arasında ayarlanabilen hareketli ortalama
 - Space, Backspace ve Enter desteği

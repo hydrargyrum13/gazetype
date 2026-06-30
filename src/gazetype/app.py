@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 from gazetype.blink import DeliberateBlinkDetector
 from gazetype.calibration import CalibrationModel, calibration_targets
 from gazetype.input_windows import WindowsInputSender
+from gazetype.keyboards import KeyboardGeometry
 from gazetype.landing import LandingDetector
 from gazetype.models import GazePoint, KeyboardLayout, SENSITIVITY_PROFILES, Sensitivity, VisionFrame
 from gazetype.settings import AppSettings, SettingsStore
@@ -93,6 +94,7 @@ class GazetypeController:
             layout=KeyboardLayout(str(values["layout"])),
             sensitivity=Sensitivity(str(values["sensitivity"])),
             calibration_point_count=int(values["calibration_point_count"]),
+            calibration_mode=str(values["calibration_mode"]),
             gaze_average_count=int(values["gaze_average_count"]),
         )
         self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
@@ -105,9 +107,16 @@ class GazetypeController:
         self.worker.start()
         self.tracking_window.show()
         self.settings_window.showMinimized()
-        self.calibration_window.begin(
-            self.screen, calibration_targets(self.settings.calibration_point_count)
-        )
+        calibration_keyboard = None
+        if self.settings.calibration_mode == "keyboard":
+            calibration_keyboard = KeyboardGeometry(self.settings.layout)
+            targets = tuple(
+                (key.x + key.width / 2, key.y + key.height / 2)
+                for key in calibration_keyboard.keys
+            )
+        else:
+            targets = calibration_targets(self.settings.calibration_point_count)
+        self.calibration_window.begin(self.screen, targets, calibration_keyboard)
 
     def finish_calibration(self, features, targets) -> None:
         try:

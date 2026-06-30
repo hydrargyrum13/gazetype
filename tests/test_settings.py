@@ -32,3 +32,9 @@ def test_gaze_average_count_is_persisted_and_bounded() -> None:
     assert AppSettings.from_dict(settings.to_dict()).gaze_average_count == 12
     assert AppSettings(gaze_average_count=100).gaze_average_count == 30
     assert AppSettings(gaze_average_count=0).gaze_average_count == 1
+
+
+def test_keyboard_calibration_mode_is_persisted() -> None:
+    settings = AppSettings(calibration_mode="keyboard")
+    assert AppSettings.from_dict(settings.to_dict()).calibration_mode == "keyboard"
+    assert AppSettings(calibration_mode="unknown").calibration_mode == "grid"
