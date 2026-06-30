@@ -93,7 +93,9 @@ class GazetypeController:
             layout=KeyboardLayout(str(values["layout"])),
             sensitivity=Sensitivity(str(values["sensitivity"])),
             calibration_point_count=int(values["calibration_point_count"]),
+            gaze_average_count=int(values["gaze_average_count"]),
         )
+        self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
         self._stop_worker()
         self.worker = CameraWorker(self.settings.camera_index)
         self.worker.frame_ready.connect(self.on_vision_frame)

@@ -157,10 +157,15 @@ class SettingsWindow(QMainWindow):
         self.point_count.setRange(MINIMUM_CALIBRATION_POINTS, MAXIMUM_CALIBRATION_POINTS)
         self.point_count.setValue(settings.calibration_point_count)
         self.point_count.setSuffix(" nokta")
+        self.gaze_average_count = QSpinBox()
+        self.gaze_average_count.setRange(1, 30)
+        self.gaze_average_count.setValue(settings.gaze_average_count)
+        self.gaze_average_count.setSuffix(" bakış")
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
         form.addRow("Kalibrasyon", self.point_count)
+        form.addRow("Bakış ortalaması", self.gaze_average_count)
         layout.addLayout(form)
 
         self.status = QLabel("Hazır")
@@ -252,6 +257,7 @@ class SettingsWindow(QMainWindow):
             "layout": self.layout_combo.currentData(),
             "sensitivity": self.sensitivity_combo.currentData(),
             "calibration_point_count": self.point_count.value(),
+            "gaze_average_count": self.gaze_average_count.value(),
         })
 
     def set_status(self, message: str, error: bool = False) -> None:

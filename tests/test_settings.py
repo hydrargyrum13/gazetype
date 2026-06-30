@@ -25,3 +25,10 @@ def test_settings_normalizes_qt_string_enum_values() -> None:
     assert settings.sensitivity is Sensitivity.FAST
     assert serialized["layout"] == "tr_q"
     assert serialized["sensitivity"] == "fast"
+
+
+def test_gaze_average_count_is_persisted_and_bounded() -> None:
+    settings = AppSettings(gaze_average_count=12)
+    assert AppSettings.from_dict(settings.to_dict()).gaze_average_count == 12
+    assert AppSettings(gaze_average_count=100).gaze_average_count == 30
+    assert AppSettings(gaze_average_count=0).gaze_average_count == 1

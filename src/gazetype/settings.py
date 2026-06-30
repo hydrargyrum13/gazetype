@@ -22,6 +22,7 @@ class AppSettings:
     layout: KeyboardLayout = KeyboardLayout.TURKISH_Q
     sensitivity: Sensitivity = Sensitivity.FAST
     calibration_point_count: int = DEFAULT_CALIBRATION_POINT_COUNT
+    gaze_average_count: int = 3
     calibration: CalibrationModel | None = None
 
     def __post_init__(self) -> None:
@@ -35,6 +36,7 @@ class AppSettings:
             MINIMUM_CALIBRATION_POINTS,
             min(int(self.calibration_point_count), MAXIMUM_CALIBRATION_POINTS),
         )
+        self.gaze_average_count = max(1, min(int(self.gaze_average_count), 30))
 
     def to_dict(self) -> dict[str, object]:
         data = asdict(self)
@@ -55,6 +57,7 @@ class AppSettings:
             calibration_point_count=int(
                 data.get("calibration_point_count", DEFAULT_CALIBRATION_POINT_COUNT)
             ),
+            gaze_average_count=int(data.get("gaze_average_count", 3)),
             calibration=(
                 CalibrationModel.from_dict(calibration_data)
                 if isinstance(calibration_data, dict)
