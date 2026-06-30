@@ -23,6 +23,10 @@ class CameraPreviewWorker(QThread):
     def run(self) -> None:
         import cv2
 
+        # Missing camera indices are expected during discovery; report them in
+        # the UI instead of printing OpenCV backend warnings to the console.
+        if hasattr(cv2, "setLogLevel"):
+            cv2.setLogLevel(2)
         backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
         capture = cv2.VideoCapture(self.camera_index, backend)
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
@@ -47,4 +51,3 @@ class CameraPreviewWorker(QThread):
                 self.msleep(70)
         finally:
             capture.release()
-

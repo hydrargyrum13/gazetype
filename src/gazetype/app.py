@@ -9,7 +9,7 @@ from gazetype.blink import DeliberateBlinkDetector
 from gazetype.calibration import CalibrationModel
 from gazetype.input_windows import WindowsInputSender
 from gazetype.landing import LandingDetector
-from gazetype.models import GazePoint, SENSITIVITY_PROFILES, VisionFrame
+from gazetype.models import GazePoint, KeyboardLayout, SENSITIVITY_PROFILES, Sensitivity, VisionFrame
 from gazetype.settings import AppSettings, SettingsStore
 from gazetype.ui import CalibrationWindow, KeyboardOverlay, SettingsWindow, ToggleWindow, show_error
 from gazetype.vision import CameraWorker
@@ -80,8 +80,8 @@ class GazetypeController:
             camera_index=int(values["camera_index"]),
             screen_name=str(values["screen_name"]),
             screen_geometry=str(values["screen_geometry"]),
-            layout=values["layout"],
-            sensitivity=values["sensitivity"],
+            layout=KeyboardLayout(str(values["layout"])),
+            sensitivity=Sensitivity(str(values["sensitivity"])),
         )
         self._stop_worker()
         self.worker = CameraWorker(self.settings.camera_index)

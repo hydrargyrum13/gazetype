@@ -18,6 +18,14 @@ class AppSettings:
     sensitivity: Sensitivity = Sensitivity.FAST
     calibration: CalibrationModel | None = None
 
+    def __post_init__(self) -> None:
+        # Qt stores StrEnum values as plain strings inside QVariant/QComboBox.
+        # Normalize at the boundary so persistence always sees real enums.
+        if not isinstance(self.layout, KeyboardLayout):
+            self.layout = KeyboardLayout(str(self.layout))
+        if not isinstance(self.sensitivity, Sensitivity):
+            self.sensitivity = Sensitivity(str(self.sensitivity))
+
     def to_dict(self) -> dict[str, object]:
         data = asdict(self)
         data["layout"] = self.layout.value
@@ -64,4 +72,3 @@ class SettingsStore:
             json.dumps(settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temporary.replace(self.path)
-

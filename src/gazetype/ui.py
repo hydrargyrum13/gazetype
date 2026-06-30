@@ -35,6 +35,13 @@ COLORS = {
 }
 
 
+def _ui_font(pixel_size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:
+    font = QFont("Segoe UI")
+    font.setPixelSize(max(1, pixel_size))
+    font.setWeight(weight)
+    return font
+
+
 class CameraPreviewCard(QPushButton):
     selected = Signal(int)
 
@@ -85,8 +92,8 @@ class CameraPreviewCard(QPushButton):
     def _refresh_style(self) -> None:
         border = "#2cc997" if self.isChecked() else "#526078"
         self.setStyleSheet(
-            f"CameraPreviewCard {{ background: #202837; border: 3px solid {border}; border-radius: 9px; }}"
-            "CameraPreviewCard:hover { border-color: #2cc997; }"
+            f"QPushButton {{ background: #202837; border: 3px solid {border}; border-radius: 9px; }}"
+            "QPushButton:hover { border-color: #2cc997; }"
         )
 
 
@@ -312,14 +319,14 @@ class CalibrationWindow(QWidget):
         painter.setBrush(QColor(255, 255, 255))
         painter.drawEllipse(point, 6, 6)
         painter.setPen(COLORS["text"])
-        painter.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        painter.setFont(_ui_font(24, QFont.Weight.Bold))
         painter.drawText(
             QRectF(0, self.height() * 0.43, self.width(), 50),
             Qt.AlignCenter,
             f"Noktaya bakın  •  {self._target_index + 1}/9",
         )
         painter.setPen(COLORS["muted"])
-        painter.setFont(QFont("Segoe UI", 12))
+        painter.setFont(_ui_font(16))
         message = "Yüz algılandı" if self._face_present else "Yüzünüzü kameraya gösterin"
         painter.drawText(QRectF(0, self.height() * 0.49, self.width(), 40), Qt.AlignCenter, message)
 
@@ -377,11 +384,11 @@ class KeyboardOverlay(QWidget):
                 painter.restore()
             painter.setPen(COLORS["text"])
             font_size = max(12, min(24, int(rect.height() * 0.32)))
-            painter.setFont(QFont("Segoe UI", font_size, QFont.Weight.DemiBold))
+            painter.setFont(_ui_font(font_size, QFont.Weight.DemiBold))
             painter.drawText(rect, Qt.AlignCenter, key.label.upper() if len(key.label) == 1 else key.label)
         painter.setPen(COLORS["muted"] if self.face_present else COLORS["danger"])
         status = f"Kamera {self.fps:.0f} FPS" if self.face_present else "Yüz algılanamadı — yazma duraklatıldı"
-        painter.setFont(QFont("Segoe UI", 10))
+        painter.setFont(_ui_font(13))
         painter.drawText(QRectF(16, keyboard_top, 400, 18), Qt.AlignVCenter, status)
 
     @staticmethod
