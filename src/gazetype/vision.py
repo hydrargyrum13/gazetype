@@ -30,6 +30,31 @@ def _normalized(value: float, first: float, second: float) -> float:
     return (value - low) / max(high - low, 1e-6)
 
 
+def _quadrilateral_eye_ratio(
+    iris: tuple[float, float],
+    first_corner: tuple[float, float],
+    second_corner: tuple[float, float],
+    upper_lid: tuple[float, float],
+    lower_lid: tuple[float, float],
+) -> tuple[float, float]:
+    """Map an iris into the eye's tilted local horizontal/vertical axes."""
+    left_corner, right_corner = sorted((first_corner, second_corner), key=lambda point: point[0])
+    top_lid, bottom_lid = sorted((upper_lid, lower_lid), key=lambda point: point[1])
+    horizontal = np.subtract(right_corner, left_corner)
+    vertical = np.subtract(bottom_lid, top_lid)
+    center = (np.asarray(top_lid) + np.asarray(bottom_lid)) / 2.0
+    axes = np.column_stack((horizontal, vertical))
+    if abs(float(np.linalg.det(axes))) < 1e-9:
+        return (
+            _normalized(iris[0], first_corner[0], second_corner[0]),
+            _normalized(iris[1], upper_lid[1], lower_lid[1]),
+        )
+    horizontal_position, vertical_position = np.linalg.solve(
+        axes, np.asarray(iris) - center
+    )
+    return 0.5 + float(horizontal_position), 0.5 + float(vertical_position)
+
+
 def _pose_angles(transformation_matrix: object | None) -> tuple[float, float]:
     if transformation_matrix is None:
         return 0.0, 0.0
@@ -43,7 +68,9 @@ def _pose_angles(transformation_matrix: object | None) -> tuple[float, float]:
 
 
 def extract_gaze_features(
-    landmarks: object, transformation_matrix: object | None = None
+    landmarks: object,
+    transformation_matrix: object | None = None,
+    quadrilateral_eye_mapping: bool = True,
 ) -> tuple[float, ...]:
     """Extract binocular gaze plus translation, roll and distance-aware head pose."""
     points = landmarks
@@ -52,10 +79,26 @@ def extract_gaze_features(
     right_iris_x = float(np.mean([points[index].x for index in range(473, 478)]))
     right_iris_y = float(np.mean([points[index].y for index in range(473, 478)]))
 
-    left_x = _normalized(left_iris_x, points[33].x, points[133].x)
-    right_x = _normalized(right_iris_x, points[362].x, points[263].x)
-    left_y = _normalized(left_iris_y, points[159].y, points[145].y)
-    right_y = _normalized(right_iris_y, points[386].y, points[374].y)
+    if quadrilateral_eye_mapping:
+        left_x, left_y = _quadrilateral_eye_ratio(
+            (left_iris_x, left_iris_y),
+            (points[33].x, points[33].y),
+            (points[133].x, points[133].y),
+            (points[159].x, points[159].y),
+            (points[145].x, points[145].y),
+        )
+        right_x, right_y = _quadrilateral_eye_ratio(
+            (right_iris_x, right_iris_y),
+            (points[362].x, points[362].y),
+            (points[263].x, points[263].y),
+            (points[386].x, points[386].y),
+            (points[374].x, points[374].y),
+        )
+    else:
+        left_x = _normalized(left_iris_x, points[33].x, points[133].x)
+        right_x = _normalized(right_iris_x, points[362].x, points[263].x)
+        left_y = _normalized(left_iris_y, points[159].y, points[145].y)
+        right_y = _normalized(right_iris_y, points[386].y, points[374].y)
 
     left_center_x = (points[33].x + points[133].x) / 2
     left_center_y = (points[159].y + points[145].y) / 2
@@ -90,9 +133,12 @@ class CameraWorker(QThread):
     face_presence = Signal(bool)
     error = Signal(str)
 
-    def __init__(self, camera_index: int, parent=None):
+    def __init__(
+        self, camera_index: int, quadrilateral_eye_mapping: bool = True, parent=None
+    ):
         super().__init__(parent)
         self.camera_index = camera_index
+        self.quadrilateral_eye_mapping = quadrilateral_eye_mapping
 
     def stop(self) -> None:
         self.requestInterruption()
@@ -192,7 +238,11 @@ class CameraWorker(QThread):
                         if result.facial_transformation_matrixes
                         else None
                     )
-                    features = extract_gaze_features(result.face_landmarks[0], transformation)
+                    features = extract_gaze_features(
+                        result.face_landmarks[0],
+                        transformation,
+                        self.quadrilateral_eye_mapping,
+                    )
                     blendshapes = {
                         category.category_name: float(category.score)
                         for category in result.face_blendshapes[0]

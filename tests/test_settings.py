@@ -41,6 +41,13 @@ def test_automatic_eye_ratio_gain_defaults_on_and_is_persisted() -> None:
     assert settings.to_dict()["auto_gaze_gain"] is False
 
 
+def test_quadrilateral_eye_mapping_defaults_on_and_is_persisted() -> None:
+    assert AppSettings().quadrilateral_eye_mapping is True
+    settings = AppSettings.from_dict({"quadrilateral_eye_mapping": False})
+    assert settings.quadrilateral_eye_mapping is False
+    assert settings.to_dict()["quadrilateral_eye_mapping"] is False
+
+
 def test_keyboard_calibration_mode_is_persisted() -> None:
     settings = AppSettings(calibration_mode="keyboard")
     assert AppSettings.from_dict(settings.to_dict()).calibration_mode == "keyboard"

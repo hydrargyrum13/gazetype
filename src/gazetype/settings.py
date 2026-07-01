@@ -25,6 +25,7 @@ class AppSettings:
     calibration_mode: str = "grid"
     gaze_average_count: int = 3
     auto_gaze_gain: bool = True
+    quadrilateral_eye_mapping: bool = True
     horizontal_gain_percent: int = 100
     vertical_gain_percent: int = 130
     vertical_offset_percent: int = 0
@@ -82,6 +83,7 @@ class AppSettings:
             calibration_mode=str(data.get("calibration_mode", "grid")),
             gaze_average_count=int(data.get("gaze_average_count", 3)),
             auto_gaze_gain=bool(data.get("auto_gaze_gain", True)),
+            quadrilateral_eye_mapping=bool(data.get("quadrilateral_eye_mapping", True)),
             horizontal_gain_percent=int(data.get("horizontal_gain_percent", 100)),
             vertical_gain_percent=int(data.get("vertical_gain_percent", 130)),
             vertical_offset_percent=int(data.get("vertical_offset_percent", 0)),

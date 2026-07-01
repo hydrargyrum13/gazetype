@@ -23,6 +23,7 @@ def test_camera_preview_cards_select_camera() -> None:
     assert window.settings_tabs.tabText(1) == "Gelişmiş Ayarlar"
     assert window.settings_tabs.currentIndex() == 0
     assert window.auto_gaze_gain.isChecked()
+    assert window.quadrilateral_eye_mapping.isChecked()
     assert not window.horizontal_gain.isEnabled()
     assert not window.vertical_gain.isEnabled()
     window.auto_gaze_gain.setChecked(False)

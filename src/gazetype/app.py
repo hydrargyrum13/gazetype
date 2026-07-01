@@ -130,6 +130,7 @@ class GazetypeController:
             calibration_mode=str(values["calibration_mode"]),
             gaze_average_count=int(values["gaze_average_count"]),
             auto_gaze_gain=bool(values["auto_gaze_gain"]),
+            quadrilateral_eye_mapping=bool(values["quadrilateral_eye_mapping"]),
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
             vertical_gain_percent=int(values["vertical_gain_percent"]),
             vertical_offset_percent=int(values["vertical_offset_percent"]),
@@ -141,7 +142,9 @@ class GazetypeController:
         self.previous_head_sample = None
         self.head_motion_until_ms = 0
         self._stop_worker()
-        self.worker = CameraWorker(self.settings.camera_index)
+        self.worker = CameraWorker(
+            self.settings.camera_index, self.settings.quadrilateral_eye_mapping
+        )
         self.worker.frame_ready.connect(self.on_vision_frame)
         self.worker.tracking_preview.connect(self.tracking_window.set_frame)
         self.worker.face_presence.connect(self.on_face_presence)

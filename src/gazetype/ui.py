@@ -176,6 +176,10 @@ class SettingsWindow(QMainWindow):
         self.gaze_average_count.setSuffix(" bakış")
         self.auto_gaze_gain = QCheckBox("Göz oranlarına göre otomatik hesapla")
         self.auto_gaze_gain.setChecked(settings.auto_gaze_gain)
+        self.quadrilateral_eye_mapping = QCheckBox(
+            "Kafa eğimine dayanıklı dörtgen göz eşleme"
+        )
+        self.quadrilateral_eye_mapping.setChecked(settings.quadrilateral_eye_mapping)
         self.horizontal_gain = QSpinBox()
         self.horizontal_gain.setRange(50, 200)
         self.horizontal_gain.setValue(settings.horizontal_gain_percent)
@@ -203,6 +207,7 @@ class SettingsWindow(QMainWindow):
         form.addRow("Kalibrasyon modu", self.calibration_mode)
         form.addRow("Izgara noktaları", self.point_count)
         advanced_form.addRow("Bakış ortalaması", self.gaze_average_count)
+        advanced_form.addRow("Göz bebeği konumu", self.quadrilateral_eye_mapping)
         advanced_form.addRow("Yatay / dikey kazanç", self.auto_gaze_gain)
         advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
         advanced_form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
@@ -307,6 +312,7 @@ class SettingsWindow(QMainWindow):
             "calibration_mode": self.calibration_mode.currentData(),
             "gaze_average_count": self.gaze_average_count.value(),
             "auto_gaze_gain": self.auto_gaze_gain.isChecked(),
+            "quadrilateral_eye_mapping": self.quadrilateral_eye_mapping.isChecked(),
             "horizontal_gain_percent": self.horizontal_gain.value(),
             "vertical_gain_percent": self.vertical_gain.value(),
             "vertical_offset_percent": self.vertical_offset.value(),
