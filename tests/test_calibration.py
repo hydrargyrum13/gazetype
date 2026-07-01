@@ -48,3 +48,19 @@ def test_old_calibration_model_is_rejected() -> None:
         assert "outdated" in str(error)
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_robust_calibration_reduces_the_effect_of_a_bad_sample() -> None:
+    rng = np.random.default_rng(7)
+    features = rng.normal(0.0, 0.15, size=(60, 10))
+    targets = np.column_stack((
+        0.5 + features[:, 0] * 0.8,
+        0.5 + features[:, 1] * 0.8,
+    ))
+    corrupted_targets = targets.copy()
+    corrupted_targets[0] = (1.0, 0.0)
+    robust = CalibrationModel.fit(features, corrupted_targets, robust=True)
+    ordinary = CalibrationModel.fit(features, corrupted_targets, robust=False)
+    robust_error = np.linalg.norm(np.asarray(robust.predict(features[1])) - targets[1])
+    ordinary_error = np.linalg.norm(np.asarray(ordinary.predict(features[1])) - targets[1])
+    assert robust_error < ordinary_error

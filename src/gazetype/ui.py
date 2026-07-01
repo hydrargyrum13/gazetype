@@ -180,6 +180,12 @@ class SettingsWindow(QMainWindow):
             "Kafa eğimine dayanıklı dörtgen göz eşleme"
         )
         self.quadrilateral_eye_mapping.setChecked(settings.quadrilateral_eye_mapping)
+        self.binocular_stabilization = QCheckBox("İki göz verisini birleştirerek sabitle")
+        self.binocular_stabilization.setChecked(settings.binocular_stabilization)
+        self.adaptive_gaze_filter = QCheckBox("Hareket hızına uyarlanan bakış filtresi")
+        self.adaptive_gaze_filter.setChecked(settings.adaptive_gaze_filter)
+        self.robust_calibration = QCheckBox("Aykırı örneklere dayanıklı kalibrasyon")
+        self.robust_calibration.setChecked(settings.robust_calibration)
         self.horizontal_gain = QSpinBox()
         self.horizontal_gain.setRange(50, 200)
         self.horizontal_gain.setValue(settings.horizontal_gain_percent)
@@ -201,6 +207,7 @@ class SettingsWindow(QMainWindow):
         self.head_motion_threshold.setValue(settings.head_motion_threshold_percent)
         self.head_motion_threshold.setSuffix(" %")
         self.auto_gaze_gain.toggled.connect(self._update_gain_controls)
+        self.adaptive_gaze_filter.toggled.connect(self._update_filter_controls)
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
@@ -208,6 +215,9 @@ class SettingsWindow(QMainWindow):
         form.addRow("Izgara noktaları", self.point_count)
         advanced_form.addRow("Bakış ortalaması", self.gaze_average_count)
         advanced_form.addRow("Göz bebeği konumu", self.quadrilateral_eye_mapping)
+        advanced_form.addRow("İki göz", self.binocular_stabilization)
+        advanced_form.addRow("Bakış filtresi", self.adaptive_gaze_filter)
+        advanced_form.addRow("Kalibrasyon", self.robust_calibration)
         advanced_form.addRow("Yatay / dikey kazanç", self.auto_gaze_gain)
         advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
         advanced_form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
@@ -216,6 +226,7 @@ class SettingsWindow(QMainWindow):
         advanced_form.addRow("Kafa eşiği (80–130 dengeli)", self.head_motion_threshold)
         self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
         self._update_gain_controls()
+        self._update_filter_controls()
         self.settings_tabs.addTab(settings_page, "Ayarlar")
         self.settings_tabs.addTab(advanced_settings_page, "Gelişmiş Ayarlar")
         layout.addWidget(self.settings_tabs)
@@ -313,6 +324,9 @@ class SettingsWindow(QMainWindow):
             "gaze_average_count": self.gaze_average_count.value(),
             "auto_gaze_gain": self.auto_gaze_gain.isChecked(),
             "quadrilateral_eye_mapping": self.quadrilateral_eye_mapping.isChecked(),
+            "binocular_stabilization": self.binocular_stabilization.isChecked(),
+            "adaptive_gaze_filter": self.adaptive_gaze_filter.isChecked(),
+            "robust_calibration": self.robust_calibration.isChecked(),
             "horizontal_gain_percent": self.horizontal_gain.value(),
             "vertical_gain_percent": self.vertical_gain.value(),
             "vertical_offset_percent": self.vertical_offset.value(),
@@ -324,6 +338,9 @@ class SettingsWindow(QMainWindow):
         manual = not self.auto_gaze_gain.isChecked()
         self.horizontal_gain.setEnabled(manual)
         self.vertical_gain.setEnabled(manual)
+
+    def _update_filter_controls(self) -> None:
+        self.gaze_average_count.setEnabled(not self.adaptive_gaze_filter.isChecked())
 
     def set_status(self, message: str, error: bool = False) -> None:
         color = "#ef5b5b" if error else "#aebacc"

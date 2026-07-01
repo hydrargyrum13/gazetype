@@ -48,6 +48,21 @@ def test_quadrilateral_eye_mapping_defaults_on_and_is_persisted() -> None:
     assert settings.to_dict()["quadrilateral_eye_mapping"] is False
 
 
+def test_precision_tracking_options_default_on_and_are_persisted() -> None:
+    defaults = AppSettings()
+    assert defaults.binocular_stabilization is True
+    assert defaults.adaptive_gaze_filter is True
+    assert defaults.robust_calibration is True
+    settings = AppSettings.from_dict({
+        "binocular_stabilization": False,
+        "adaptive_gaze_filter": False,
+        "robust_calibration": False,
+    })
+    assert settings.binocular_stabilization is False
+    assert settings.adaptive_gaze_filter is False
+    assert settings.robust_calibration is False
+
+
 def test_keyboard_calibration_mode_is_persisted() -> None:
     settings = AppSettings(calibration_mode="keyboard")
     assert AppSettings.from_dict(settings.to_dict()).calibration_mode == "keyboard"

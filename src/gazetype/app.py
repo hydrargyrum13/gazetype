@@ -54,6 +54,44 @@ def eye_ratio_gains(model: CalibrationModel) -> tuple[float, float]:
     )
 
 
+def stabilize_binocular_features(
+    features: list[float], model: CalibrationModel
+) -> list[float]:
+    """Fuse both eyes in normalized space while preserving each eye's calibration."""
+    stabilized = features.copy()
+    for left_index, right_index in ((0, 2), (1, 3)):
+        left_delta = (
+            features[left_index] - model.feature_mean[left_index]
+        ) / model.feature_scale[left_index]
+        right_delta = (
+            features[right_index] - model.feature_mean[right_index]
+        ) / model.feature_scale[right_index]
+        shared_delta = (left_delta + right_delta) / 2.0
+        stabilized[left_index] = (
+            model.feature_mean[left_index]
+            + shared_delta * model.feature_scale[left_index]
+        )
+        stabilized[right_index] = (
+            model.feature_mean[right_index]
+            + shared_delta * model.feature_scale[right_index]
+        )
+    return stabilized
+
+
+def adaptive_gaze_point(
+    previous: tuple[float, float] | None, current: tuple[float, float]
+) -> tuple[float, float]:
+    """Smooth small landmark jitter while following deliberate saccades quickly."""
+    if previous is None:
+        return current
+    distance = ((current[0] - previous[0]) ** 2 + (current[1] - previous[1]) ** 2) ** 0.5
+    alpha = 0.18 + 0.72 * min(distance / 0.18, 1.0)
+    return (
+        previous[0] + alpha * (current[0] - previous[0]),
+        previous[1] + alpha * (current[1] - previous[1]),
+    )
+
+
 class GazetypeController:
     def __init__(self, application: QApplication):
         self.application = application
@@ -72,6 +110,7 @@ class GazetypeController:
         self.face_present = False
         self.screen = None
         self.recent_gaze: deque[tuple[float, float]] = deque(maxlen=3)
+        self.filtered_gaze: tuple[float, float] | None = None
         self.previous_head_sample: tuple[int, tuple[float, ...]] | None = None
         self.head_motion_until_ms = 0
 
@@ -131,6 +170,9 @@ class GazetypeController:
             gaze_average_count=int(values["gaze_average_count"]),
             auto_gaze_gain=bool(values["auto_gaze_gain"]),
             quadrilateral_eye_mapping=bool(values["quadrilateral_eye_mapping"]),
+            binocular_stabilization=bool(values["binocular_stabilization"]),
+            adaptive_gaze_filter=bool(values["adaptive_gaze_filter"]),
+            robust_calibration=bool(values["robust_calibration"]),
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
             vertical_gain_percent=int(values["vertical_gain_percent"]),
             vertical_offset_percent=int(values["vertical_offset_percent"]),
@@ -138,6 +180,7 @@ class GazetypeController:
             head_motion_threshold_percent=int(values["head_motion_threshold_percent"]),
         )
         self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
+        self.filtered_gaze = None
         self.tracking_window.configure_tuning(self.settings)
         self.previous_head_sample = None
         self.head_motion_until_ms = 0
@@ -165,7 +208,9 @@ class GazetypeController:
 
     def finish_calibration(self, features, targets) -> None:
         try:
-            self.settings.calibration = CalibrationModel.fit(features, targets)
+            self.settings.calibration = CalibrationModel.fit(
+                features, targets, robust=self.settings.robust_calibration
+            )
             self.store.save(self.settings)
         except ValueError as exc:
             self.on_camera_error(str(exc))
@@ -204,6 +249,8 @@ class GazetypeController:
             compensated_features[index] = baseline + (
                 compensated_features[index] - baseline
             ) * compensation
+        if self.settings.binocular_stabilization:
+            compensated_features = stabilize_binocular_features(compensated_features, model)
         x, y = model.predict(compensated_features)
         if self.settings.auto_gaze_gain:
             horizontal_gain, vertical_gain = eye_ratio_gains(model)
@@ -225,9 +272,13 @@ class GazetypeController:
         motion_threshold = 0.9 * self.settings.head_motion_threshold_percent / 100.0
         if motion_speed > motion_threshold:
             self.head_motion_until_ms = frame.timestamp_ms + 160
-        self.recent_gaze.append((x, y))
-        x = sum(point[0] for point in self.recent_gaze) / len(self.recent_gaze)
-        y = sum(point[1] for point in self.recent_gaze) / len(self.recent_gaze)
+        if self.settings.adaptive_gaze_filter:
+            self.filtered_gaze = adaptive_gaze_point(self.filtered_gaze, (x, y))
+            x, y = self.filtered_gaze
+        else:
+            self.recent_gaze.append((x, y))
+            x = sum(point[0] for point in self.recent_gaze) / len(self.recent_gaze)
+            y = sum(point[1] for point in self.recent_gaze) / len(self.recent_gaze)
         toggle_armed = x >= 0.87 and y <= 0.15
         eyes_closed = frame.blink_left >= self.blink.close_threshold and frame.blink_right >= self.blink.close_threshold
         if eyes_closed:
@@ -260,6 +311,7 @@ class GazetypeController:
         self.overlay.face_present = present
         if not present:
             self.recent_gaze.clear()
+            self.filtered_gaze = None
             self.previous_head_sample = None
             self.landing.reset()
             self.blink.reset()
@@ -286,6 +338,7 @@ class GazetypeController:
         self.keyboard_enabled = not self.keyboard_enabled
         self.landing.reset()
         self.recent_gaze.clear()
+        self.filtered_gaze = None
         self.previous_head_sample = None
         self.head_motion_until_ms = 0
         self.blink.reset()

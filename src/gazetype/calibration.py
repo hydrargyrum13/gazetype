@@ -92,6 +92,7 @@ class CalibrationModel:
         features: Iterable[Iterable[float]],
         targets: Iterable[Iterable[float]],
         ridge: float = 1e-2,
+        robust: bool = True,
     ) -> "CalibrationModel":
         feature_array = np.asarray(tuple(features), dtype=np.float64)
         target_array = np.asarray(tuple(targets), dtype=np.float64)
@@ -107,6 +108,18 @@ class CalibrationModel:
         regularizer = ridge * np.eye(design.shape[1])
         regularizer[0, 0] = 0.0
         coefficients = np.linalg.solve(design.T @ design + regularizer, design.T @ target_array)
+        if robust:
+            for _ in range(4):
+                residuals = np.linalg.norm(target_array - design @ coefficients, axis=1)
+                median = float(np.median(residuals))
+                scale = max(1.4826 * float(np.median(np.abs(residuals - median))), 1e-3)
+                cutoff = median + 1.5 * scale
+                weights = np.minimum(1.0, cutoff / np.maximum(residuals, 1e-9))
+                weighted_design = design * weights[:, None]
+                coefficients = np.linalg.solve(
+                    design.T @ weighted_design + regularizer,
+                    design.T @ (target_array * weights[:, None]),
+                )
         return cls(
             tuple(tuple(float(value) for value in coefficients[:, axis]) for axis in range(2)),
             tuple(float(value) for value in feature_mean),

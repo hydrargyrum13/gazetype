@@ -24,6 +24,12 @@ def test_camera_preview_cards_select_camera() -> None:
     assert window.settings_tabs.currentIndex() == 0
     assert window.auto_gaze_gain.isChecked()
     assert window.quadrilateral_eye_mapping.isChecked()
+    assert window.binocular_stabilization.isChecked()
+    assert window.adaptive_gaze_filter.isChecked()
+    assert window.robust_calibration.isChecked()
+    assert not window.gaze_average_count.isEnabled()
+    window.adaptive_gaze_filter.setChecked(False)
+    assert window.gaze_average_count.isEnabled()
     assert not window.horizontal_gain.isEnabled()
     assert not window.vertical_gain.isEnabled()
     window.auto_gaze_gain.setChecked(False)
