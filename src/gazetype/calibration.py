@@ -6,9 +6,11 @@ from typing import Iterable
 import numpy as np
 
 
-CALIBRATION_MODEL_VERSION = 3
-GAZE_FEATURE_COUNT = 8
-MINIMUM_FEATURE_SCALES = np.asarray((0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.015, 0.01))
+CALIBRATION_MODEL_VERSION = 4
+GAZE_FEATURE_COUNT = 10
+MINIMUM_FEATURE_SCALES = np.asarray(
+    (0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.015, 0.01, 0.015, 0.015)
+)
 DEFAULT_CALIBRATION_POINT_COUNT = 25
 MINIMUM_CALIBRATION_POINTS = 20
 MAXIMUM_CALIBRATION_POINTS = 81
@@ -29,11 +31,11 @@ def calibration_targets(count: int) -> tuple[tuple[float, float], ...]:
 
 
 CALIBRATION_TARGETS = calibration_targets(DEFAULT_CALIBRATION_POINT_COUNT)
-BASIS_SIZE = 28
+BASIS_SIZE = 36
 
 
 def _basis(features: np.ndarray) -> np.ndarray:
-    left_x, left_y, right_x, right_y, head_x, head_y, roll, scale = features.T
+    left_x, left_y, right_x, right_y, head_x, head_y, roll, scale, yaw, pitch = features.T
     gx = (left_x + right_x) / 2
     gy = (left_y + right_y) / 2
     disparity_x = left_x - right_x
@@ -55,6 +57,8 @@ def _basis(features: np.ndarray) -> np.ndarray:
         head_y,
         roll,
         scale,
+        yaw,
+        pitch,
         gx * head_x,
         gx * head_y,
         gx * roll,
@@ -63,10 +67,16 @@ def _basis(features: np.ndarray) -> np.ndarray:
         gy * head_y,
         gy * roll,
         gy * scale,
+        gx * yaw,
+        gx * pitch,
+        gy * yaw,
+        gy * pitch,
         head_x * head_x,
         head_y * head_y,
         roll * roll,
         scale * scale,
+        yaw * yaw,
+        pitch * pitch,
     ))
 
 

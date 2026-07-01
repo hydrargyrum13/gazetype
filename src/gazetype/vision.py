@@ -30,7 +30,21 @@ def _normalized(value: float, first: float, second: float) -> float:
     return (value - low) / max(high - low, 1e-6)
 
 
-def extract_gaze_features(landmarks: object) -> tuple[float, ...]:
+def _pose_angles(transformation_matrix: object | None) -> tuple[float, float]:
+    if transformation_matrix is None:
+        return 0.0, 0.0
+    matrix = np.asarray(transformation_matrix, dtype=np.float64)
+    if matrix.shape != (4, 4):
+        return 0.0, 0.0
+    rotation = matrix[:3, :3]
+    yaw = float(np.arctan2(rotation[0, 2], rotation[2, 2]))
+    pitch = float(np.arctan2(-rotation[1, 2], np.hypot(rotation[1, 0], rotation[1, 1])))
+    return float(np.clip(yaw, -1.2, 1.2)), float(np.clip(pitch, -1.2, 1.2))
+
+
+def extract_gaze_features(
+    landmarks: object, transformation_matrix: object | None = None
+) -> tuple[float, ...]:
     """Extract binocular gaze plus translation, roll and distance-aware head pose."""
     points = landmarks
     left_iris_x = float(np.mean([points[index].x for index in range(468, 473)]))
@@ -55,6 +69,7 @@ def extract_gaze_features(landmarks: object) -> tuple[float, ...]:
     head_x = (points[1].x - eye_mid_x) / eye_distance
     head_y = (points[1].y - eye_mid_y) / eye_distance
     roll = float(np.arctan2(eye_dy, eye_dx))
+    yaw, pitch = _pose_angles(transformation_matrix)
     return (
         float(np.clip(left_x, -0.5, 1.5)),
         float(np.clip(left_y, -0.5, 1.5)),
@@ -64,6 +79,8 @@ def extract_gaze_features(landmarks: object) -> tuple[float, ...]:
         float(np.clip(head_y, -1.0, 1.0)),
         float(np.clip(roll, -0.8, 0.8)),
         float(np.clip(eye_distance, 0.05, 0.8)),
+        yaw,
+        pitch,
     )
 
 
@@ -104,6 +121,7 @@ class CameraWorker(QThread):
                 min_face_presence_confidence=0.5,
                 min_tracking_confidence=0.5,
                 output_face_blendshapes=True,
+                output_facial_transformation_matrixes=True,
             )
             previous_presence: bool | None = None
             previous_time = time.perf_counter()
@@ -169,7 +187,12 @@ class CameraWorker(QThread):
                     self.tracking_preview.emit(preview)
                     if not present:
                         continue
-                    features = extract_gaze_features(result.face_landmarks[0])
+                    transformation = (
+                        result.facial_transformation_matrixes[0]
+                        if result.facial_transformation_matrixes
+                        else None
+                    )
+                    features = extract_gaze_features(result.face_landmarks[0], transformation)
                     blendshapes = {
                         category.category_name: float(category.score)
                         for category in result.face_blendshapes[0]

@@ -19,6 +19,8 @@ uygulamasıdır.
 - Kamera parazitini azaltmak için 1–30 bakış arasında ayarlanabilen hareketli ortalama
 - Kafa dönüşü, eğimi, yuvarlanması ve kameraya uzaklığına göre bakış telafisi
 - Hızlı kafa hareketlerinde yanlış tuş basımını önleyen kısa güvenlik duraklatması
+- Canlı pencereden değiştirilebilen yatay/dikey kazanç, dikey ofset, kafa telafisi
+  ve kafa hareket eşiği deney kontrolleri
 - Space, Backspace ve Enter desteği
 - Bilinçli göz kırpma veya fare ile açma/kapatma
 - Tamamen cihaz üzerinde kamera işleme

@@ -20,7 +20,10 @@ def test_calibration_window_collects_all_twenty_five_points() -> None:
 
     timestamp = 0
     for target_index in range(len(CALIBRATION_TARGETS)):
-        features = (target_index / 25, 0.5, target_index / 25, 0.5, 0.0, 0.0, 0.0, 0.3)
+        features = (
+            target_index / 25, 0.5, target_index / 25, 0.5,
+            0.0, 0.0, 0.0, 0.3, 0.0, 0.0,
+        )
         window.add_sample(timestamp, features)
         for sample_index in range(10):
             window.add_sample(timestamp + 201 + sample_index * 33, features)

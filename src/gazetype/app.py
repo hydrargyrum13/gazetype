@@ -33,10 +33,10 @@ def head_motion_speed(
         return 0.0
     previous_ms, previous_features = previous
     elapsed = max((timestamp_ms - previous_ms) / 1000.0, 0.001)
-    weights = (1.0, 1.0, 1.8, 3.0)
+    weights = (1.0, 1.0, 1.8, 3.0, 1.4, 1.4)
     delta = sum(
         ((features[index] - previous_features[index]) * weight) ** 2
-        for index, weight in zip(range(4, 8), weights, strict=True)
+        for index, weight in zip(range(4, 10), weights, strict=True)
     ) ** 0.5
     return delta / elapsed
 
@@ -66,6 +66,7 @@ class GazetypeController:
         self.calibration_window.completed.connect(self.finish_calibration)
         self.calibration_window.cancelled.connect(self.cancel_calibration)
         self.toggle.toggled.connect(self.toggle_keyboard)
+        self.tracking_window.tuning_changed.connect(self.update_tuning)
         self._refresh_screens()
         self._create_tray()
         self.settings_window.show()
@@ -115,8 +116,14 @@ class GazetypeController:
             calibration_point_count=int(values["calibration_point_count"]),
             calibration_mode=str(values["calibration_mode"]),
             gaze_average_count=int(values["gaze_average_count"]),
+            horizontal_gain_percent=int(values["horizontal_gain_percent"]),
+            vertical_gain_percent=int(values["vertical_gain_percent"]),
+            vertical_offset_percent=int(values["vertical_offset_percent"]),
+            head_compensation_percent=int(values["head_compensation_percent"]),
+            head_motion_threshold_percent=int(values["head_motion_threshold_percent"]),
         )
         self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
+        self.tracking_window.configure_tuning(self.settings)
         self.previous_head_sample = None
         self.head_motion_until_ms = 0
         self._stop_worker()
@@ -173,12 +180,28 @@ class GazetypeController:
         model = self.settings.calibration
         if model is None or self.screen is None:
             return
-        x, y = model.predict(frame.features)
+        compensated_features = list(frame.features)
+        compensation = self.settings.head_compensation_percent / 100.0
+        for index in range(4, len(compensated_features)):
+            baseline = model.feature_mean[index]
+            compensated_features[index] = baseline + (
+                compensated_features[index] - baseline
+            ) * compensation
+        x, y = model.predict(compensated_features)
+        x = 0.5 + (x - 0.5) * self.settings.horizontal_gain_percent / 100.0
+        y = (
+            0.5
+            + (y - 0.5) * self.settings.vertical_gain_percent / 100.0
+            + self.settings.vertical_offset_percent / 100.0
+        )
+        x = max(0.0, min(x, 1.0))
+        y = max(0.0, min(y, 1.0))
         motion_speed = head_motion_speed(
             self.previous_head_sample, frame.timestamp_ms, frame.features
         )
         self.previous_head_sample = (frame.timestamp_ms, frame.features)
-        if motion_speed > 0.9:
+        motion_threshold = 0.9 * self.settings.head_motion_threshold_percent / 100.0
+        if motion_speed > motion_threshold:
             self.head_motion_until_ms = frame.timestamp_ms + 160
         self.recent_gaze.append((x, y))
         x = sum(point[0] for point in self.recent_gaze) / len(self.recent_gaze)
@@ -219,6 +242,13 @@ class GazetypeController:
             self.landing.reset()
             self.blink.reset()
             self.overlay.set_gaze_state(None, 0.0, 0.0, None)
+
+    def update_tuning(self, values: dict[str, int]) -> None:
+        for key, value in values.items():
+            if hasattr(self.settings, key):
+                setattr(self.settings, key, int(value))
+        if self.settings.calibration is not None:
+            self.store.save(self.settings)
 
     def on_camera_error(self, message: str) -> None:
         self.calibration_window.hide()

@@ -49,3 +49,18 @@ def test_outdated_calibration_does_not_reset_other_settings() -> None:
     assert settings.camera_index == 2
     assert settings.gaze_average_count == 9
     assert settings.calibration is None
+
+
+def test_experimental_sensitivity_settings_are_bounded() -> None:
+    settings = AppSettings(
+        horizontal_gain_percent=300,
+        vertical_gain_percent=20,
+        vertical_offset_percent=40,
+        head_compensation_percent=200,
+        head_motion_threshold_percent=10,
+    )
+    assert settings.horizontal_gain_percent == 200
+    assert settings.vertical_gain_percent == 50
+    assert settings.vertical_offset_percent == 25
+    assert settings.head_compensation_percent == 150
+    assert settings.head_motion_threshold_percent == 40

@@ -24,6 +24,11 @@ class AppSettings:
     calibration_point_count: int = DEFAULT_CALIBRATION_POINT_COUNT
     calibration_mode: str = "grid"
     gaze_average_count: int = 3
+    horizontal_gain_percent: int = 100
+    vertical_gain_percent: int = 130
+    vertical_offset_percent: int = 0
+    head_compensation_percent: int = 100
+    head_motion_threshold_percent: int = 100
     calibration: CalibrationModel | None = None
 
     def __post_init__(self) -> None:
@@ -38,6 +43,13 @@ class AppSettings:
             min(int(self.calibration_point_count), MAXIMUM_CALIBRATION_POINTS),
         )
         self.gaze_average_count = max(1, min(int(self.gaze_average_count), 30))
+        self.horizontal_gain_percent = max(50, min(int(self.horizontal_gain_percent), 200))
+        self.vertical_gain_percent = max(50, min(int(self.vertical_gain_percent), 250))
+        self.vertical_offset_percent = max(-25, min(int(self.vertical_offset_percent), 25))
+        self.head_compensation_percent = max(0, min(int(self.head_compensation_percent), 150))
+        self.head_motion_threshold_percent = max(
+            40, min(int(self.head_motion_threshold_percent), 200)
+        )
         if self.calibration_mode not in {"grid", "keyboard"}:
             self.calibration_mode = "grid"
 
@@ -68,6 +80,13 @@ class AppSettings:
             ),
             calibration_mode=str(data.get("calibration_mode", "grid")),
             gaze_average_count=int(data.get("gaze_average_count", 3)),
+            horizontal_gain_percent=int(data.get("horizontal_gain_percent", 100)),
+            vertical_gain_percent=int(data.get("vertical_gain_percent", 130)),
+            vertical_offset_percent=int(data.get("vertical_offset_percent", 0)),
+            head_compensation_percent=int(data.get("head_compensation_percent", 100)),
+            head_motion_threshold_percent=int(
+                data.get("head_motion_threshold_percent", 100)
+            ),
             calibration=calibration,
         )
 

@@ -168,12 +168,37 @@ class SettingsWindow(QMainWindow):
         self.gaze_average_count.setRange(1, 30)
         self.gaze_average_count.setValue(settings.gaze_average_count)
         self.gaze_average_count.setSuffix(" bakış")
+        self.horizontal_gain = QSpinBox()
+        self.horizontal_gain.setRange(50, 200)
+        self.horizontal_gain.setValue(settings.horizontal_gain_percent)
+        self.horizontal_gain.setSuffix(" %")
+        self.vertical_gain = QSpinBox()
+        self.vertical_gain.setRange(50, 250)
+        self.vertical_gain.setValue(settings.vertical_gain_percent)
+        self.vertical_gain.setSuffix(" %")
+        self.vertical_offset = QSpinBox()
+        self.vertical_offset.setRange(-25, 25)
+        self.vertical_offset.setValue(settings.vertical_offset_percent)
+        self.vertical_offset.setSuffix(" % ekran")
+        self.head_compensation = QSpinBox()
+        self.head_compensation.setRange(0, 150)
+        self.head_compensation.setValue(settings.head_compensation_percent)
+        self.head_compensation.setSuffix(" %")
+        self.head_motion_threshold = QSpinBox()
+        self.head_motion_threshold.setRange(40, 200)
+        self.head_motion_threshold.setValue(settings.head_motion_threshold_percent)
+        self.head_motion_threshold.setSuffix(" %")
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
         form.addRow("Kalibrasyon modu", self.calibration_mode)
         form.addRow("Izgara noktaları", self.point_count)
         form.addRow("Bakış ortalaması", self.gaze_average_count)
+        form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
+        form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
+        form.addRow("Dikey ofset (-8–+8 dengeli)", self.vertical_offset)
+        form.addRow("Kafa telafisi (80–120 dengeli)", self.head_compensation)
+        form.addRow("Kafa eşiği (80–130 dengeli)", self.head_motion_threshold)
         self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
         layout.addLayout(form)
 
@@ -268,6 +293,11 @@ class SettingsWindow(QMainWindow):
             "calibration_point_count": self.point_count.value(),
             "calibration_mode": self.calibration_mode.currentData(),
             "gaze_average_count": self.gaze_average_count.value(),
+            "horizontal_gain_percent": self.horizontal_gain.value(),
+            "vertical_gain_percent": self.vertical_gain.value(),
+            "vertical_offset_percent": self.vertical_offset.value(),
+            "head_compensation_percent": self.head_compensation.value(),
+            "head_motion_threshold_percent": self.head_motion_threshold.value(),
         })
 
     def set_status(self, message: str, error: bool = False) -> None:
@@ -393,6 +423,8 @@ class CalibrationWindow(QWidget):
 
 
 class TrackingWindow(QWidget):
+    tuning_changed = Signal(object)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Gazetype — Yüz ve Göz Takibi")
@@ -406,7 +438,34 @@ class TrackingWindow(QWidget):
         self.preview.setStyleSheet("background: #080b11; color: #aebacc;")
         layout.addWidget(title)
         layout.addWidget(self.preview, 1)
+        tuning_form = QFormLayout()
+        self.tuning_controls: dict[str, QSpinBox] = {}
+        for key, label, minimum, maximum, suffix in (
+            ("horizontal_gain_percent", "Yatay (90–115 dengeli)", 50, 200, " %"),
+            ("vertical_gain_percent", "Dikey (110–160 dengeli)", 50, 250, " %"),
+            ("vertical_offset_percent", "Dikey ofset (-8–+8)", -25, 25, " %"),
+            ("head_compensation_percent", "Kafa telafisi (80–120)", 0, 150, " %"),
+            ("head_motion_threshold_percent", "Kafa eşiği (80–130)", 40, 200, " %"),
+        ):
+            control = QSpinBox()
+            control.setRange(minimum, maximum)
+            control.setSuffix(suffix)
+            control.valueChanged.connect(self._emit_tuning)
+            self.tuning_controls[key] = control
+            tuning_form.addRow(label, control)
+        layout.addLayout(tuning_form)
         self.setStyleSheet("QWidget { background: #111722; color: #f6f8fc; }")
+
+    def configure_tuning(self, settings: AppSettings) -> None:
+        for key, control in self.tuning_controls.items():
+            control.blockSignals(True)
+            control.setValue(int(getattr(settings, key)))
+            control.blockSignals(False)
+
+    def _emit_tuning(self) -> None:
+        self.tuning_changed.emit({
+            key: control.value() for key, control in self.tuning_controls.items()
+        })
 
     def set_frame(self, image: QImage) -> None:
         self.preview.setPixmap(QPixmap.fromImage(image).scaled(
