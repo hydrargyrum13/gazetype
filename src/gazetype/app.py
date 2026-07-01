@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections import deque
+from math import sqrt
 
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
@@ -39,6 +40,18 @@ def head_motion_speed(
         for index, weight in zip(range(4, 10), weights, strict=True)
     ) ** 0.5
     return delta / elapsed
+
+
+def eye_ratio_gains(model: CalibrationModel) -> tuple[float, float]:
+    """Balance screen gain using eye-ratio movement measured during calibration."""
+    horizontal_spread = max((model.feature_scale[0] + model.feature_scale[2]) / 2.0, 1e-6)
+    vertical_spread = max((model.feature_scale[1] + model.feature_scale[3]) / 2.0, 1e-6)
+    horizontal_gain = 100.0 * sqrt(vertical_spread / horizontal_spread)
+    vertical_gain = 100.0 * sqrt(horizontal_spread / vertical_spread)
+    return (
+        max(50.0, min(horizontal_gain, 200.0)),
+        max(50.0, min(vertical_gain, 250.0)),
+    )
 
 
 class GazetypeController:
@@ -116,6 +129,7 @@ class GazetypeController:
             calibration_point_count=int(values["calibration_point_count"]),
             calibration_mode=str(values["calibration_mode"]),
             gaze_average_count=int(values["gaze_average_count"]),
+            auto_gaze_gain=bool(values["auto_gaze_gain"]),
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
             vertical_gain_percent=int(values["vertical_gain_percent"]),
             vertical_offset_percent=int(values["vertical_offset_percent"]),
@@ -188,10 +202,15 @@ class GazetypeController:
                 compensated_features[index] - baseline
             ) * compensation
         x, y = model.predict(compensated_features)
-        x = 0.5 + (x - 0.5) * self.settings.horizontal_gain_percent / 100.0
+        if self.settings.auto_gaze_gain:
+            horizontal_gain, vertical_gain = eye_ratio_gains(model)
+        else:
+            horizontal_gain = float(self.settings.horizontal_gain_percent)
+            vertical_gain = float(self.settings.vertical_gain_percent)
+        x = 0.5 + (x - 0.5) * horizontal_gain / 100.0
         y = (
             0.5
-            + (y - 0.5) * self.settings.vertical_gain_percent / 100.0
+            + (y - 0.5) * vertical_gain / 100.0
             + self.settings.vertical_offset_percent / 100.0
         )
         x = max(0.0, min(x, 1.0))

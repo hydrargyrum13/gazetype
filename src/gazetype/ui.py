@@ -4,6 +4,7 @@ import numpy as np
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QGridLayout,
@@ -173,6 +174,8 @@ class SettingsWindow(QMainWindow):
         self.gaze_average_count.setRange(1, 30)
         self.gaze_average_count.setValue(settings.gaze_average_count)
         self.gaze_average_count.setSuffix(" bakış")
+        self.auto_gaze_gain = QCheckBox("Göz oranlarına göre otomatik hesapla")
+        self.auto_gaze_gain.setChecked(settings.auto_gaze_gain)
         self.horizontal_gain = QSpinBox()
         self.horizontal_gain.setRange(50, 200)
         self.horizontal_gain.setValue(settings.horizontal_gain_percent)
@@ -193,18 +196,21 @@ class SettingsWindow(QMainWindow):
         self.head_motion_threshold.setRange(40, 200)
         self.head_motion_threshold.setValue(settings.head_motion_threshold_percent)
         self.head_motion_threshold.setSuffix(" %")
+        self.auto_gaze_gain.toggled.connect(self._update_gain_controls)
         form.addRow("Ekran", self.screen_combo)
         form.addRow("Klavye", self.layout_combo)
         form.addRow("Hassasiyet", self.sensitivity_combo)
         form.addRow("Kalibrasyon modu", self.calibration_mode)
         form.addRow("Izgara noktaları", self.point_count)
         advanced_form.addRow("Bakış ortalaması", self.gaze_average_count)
+        advanced_form.addRow("Yatay / dikey kazanç", self.auto_gaze_gain)
         advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
         advanced_form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
         advanced_form.addRow("Dikey ofset (-8–+8 dengeli)", self.vertical_offset)
         advanced_form.addRow("Kafa telafisi (80–120 dengeli)", self.head_compensation)
         advanced_form.addRow("Kafa eşiği (80–130 dengeli)", self.head_motion_threshold)
         self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
+        self._update_gain_controls()
         self.settings_tabs.addTab(settings_page, "Ayarlar")
         self.settings_tabs.addTab(advanced_settings_page, "Gelişmiş Ayarlar")
         layout.addWidget(self.settings_tabs)
@@ -300,12 +306,18 @@ class SettingsWindow(QMainWindow):
             "calibration_point_count": self.point_count.value(),
             "calibration_mode": self.calibration_mode.currentData(),
             "gaze_average_count": self.gaze_average_count.value(),
+            "auto_gaze_gain": self.auto_gaze_gain.isChecked(),
             "horizontal_gain_percent": self.horizontal_gain.value(),
             "vertical_gain_percent": self.vertical_gain.value(),
             "vertical_offset_percent": self.vertical_offset.value(),
             "head_compensation_percent": self.head_compensation.value(),
             "head_motion_threshold_percent": self.head_motion_threshold.value(),
         })
+
+    def _update_gain_controls(self) -> None:
+        manual = not self.auto_gaze_gain.isChecked()
+        self.horizontal_gain.setEnabled(manual)
+        self.vertical_gain.setEnabled(manual)
 
     def set_status(self, message: str, error: bool = False) -> None:
         color = "#ef5b5b" if error else "#aebacc"
@@ -467,6 +479,8 @@ class TrackingWindow(QWidget):
         for key, control in self.tuning_controls.items():
             control.blockSignals(True)
             control.setValue(int(getattr(settings, key)))
+            if key in {"horizontal_gain_percent", "vertical_gain_percent"}:
+                control.setEnabled(not settings.auto_gaze_gain)
             control.blockSignals(False)
 
     def _emit_tuning(self) -> None:

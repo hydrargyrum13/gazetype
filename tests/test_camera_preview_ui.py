@@ -22,6 +22,12 @@ def test_camera_preview_cards_select_camera() -> None:
     assert window.settings_tabs.tabText(0) == "Ayarlar"
     assert window.settings_tabs.tabText(1) == "Gelişmiş Ayarlar"
     assert window.settings_tabs.currentIndex() == 0
+    assert window.auto_gaze_gain.isChecked()
+    assert not window.horizontal_gain.isEnabled()
+    assert not window.vertical_gain.isEnabled()
+    window.auto_gaze_gain.setChecked(False)
+    assert window.horizontal_gain.isEnabled()
+    assert window.vertical_gain.isEnabled()
     window.calibration_mode.setCurrentIndex(1)
     assert window.calibration_mode.currentData() == "keyboard"
     assert not window.point_count.isEnabled()

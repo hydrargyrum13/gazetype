@@ -34,6 +34,13 @@ def test_gaze_average_count_is_persisted_and_bounded() -> None:
     assert AppSettings(gaze_average_count=0).gaze_average_count == 1
 
 
+def test_automatic_eye_ratio_gain_defaults_on_and_is_persisted() -> None:
+    assert AppSettings().auto_gaze_gain is True
+    settings = AppSettings.from_dict({"auto_gaze_gain": False})
+    assert settings.auto_gaze_gain is False
+    assert settings.to_dict()["auto_gaze_gain"] is False
+
+
 def test_keyboard_calibration_mode_is_persisted() -> None:
     settings = AppSettings(calibration_mode="keyboard")
     assert AppSettings.from_dict(settings.to_dict()).calibration_mode == "keyboard"
