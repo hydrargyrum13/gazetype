@@ -13,10 +13,12 @@ uygulamasıdır.
 - Türkçe Q ve İngilizce QWERTY ekran klavyeleri
 - Bağlı kameraları ayırt etmek için canlı kamera önizleme kartları
 - Çoklu ekran seçimi
-- 20–49 arasında ayarlanabilen nokta sayısıyla hassas bakış kalibrasyonu
+- 20–81 arasında ayarlanabilen nokta sayısıyla hassas bakış kalibrasyonu
 - Seçili klavyedeki her tuş merkezini hedef alan alternatif kalibrasyon modu
 - Hızlı göz sıçramasından sonraki iniş noktasını seçme
 - Kamera parazitini azaltmak için 1–30 bakış arasında ayarlanabilen hareketli ortalama
+- Kafa dönüşü, eğimi, yuvarlanması ve kameraya uzaklığına göre bakış telafisi
+- Hızlı kafa hareketlerinde yanlış tuş basımını önleyen kısa güvenlik duraklatması
 - Space, Backspace ve Enter desteği
 - Bilinçli göz kırpma veya fare ile açma/kapatma
 - Tamamen cihaz üzerinde kamera işleme

@@ -24,6 +24,23 @@ from gazetype.ui import (
 from gazetype.vision import CameraWorker
 
 
+def head_motion_speed(
+    previous: tuple[int, tuple[float, ...]] | None,
+    timestamp_ms: int,
+    features: tuple[float, ...],
+) -> float:
+    if previous is None:
+        return 0.0
+    previous_ms, previous_features = previous
+    elapsed = max((timestamp_ms - previous_ms) / 1000.0, 0.001)
+    weights = (1.0, 1.0, 1.8, 3.0)
+    delta = sum(
+        ((features[index] - previous_features[index]) * weight) ** 2
+        for index, weight in zip(range(4, 8), weights, strict=True)
+    ) ** 0.5
+    return delta / elapsed
+
+
 class GazetypeController:
     def __init__(self, application: QApplication):
         self.application = application
@@ -42,6 +59,8 @@ class GazetypeController:
         self.face_present = False
         self.screen = None
         self.recent_gaze: deque[tuple[float, float]] = deque(maxlen=3)
+        self.previous_head_sample: tuple[int, tuple[float, ...]] | None = None
+        self.head_motion_until_ms = 0
 
         self.settings_window.start_requested.connect(self.begin_calibration)
         self.calibration_window.completed.connect(self.finish_calibration)
@@ -98,6 +117,8 @@ class GazetypeController:
             gaze_average_count=int(values["gaze_average_count"]),
         )
         self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
+        self.previous_head_sample = None
+        self.head_motion_until_ms = 0
         self._stop_worker()
         self.worker = CameraWorker(self.settings.camera_index)
         self.worker.frame_ready.connect(self.on_vision_frame)
@@ -153,6 +174,12 @@ class GazetypeController:
         if model is None or self.screen is None:
             return
         x, y = model.predict(frame.features)
+        motion_speed = head_motion_speed(
+            self.previous_head_sample, frame.timestamp_ms, frame.features
+        )
+        self.previous_head_sample = (frame.timestamp_ms, frame.features)
+        if motion_speed > 0.9:
+            self.head_motion_until_ms = frame.timestamp_ms + 160
         self.recent_gaze.append((x, y))
         x = sum(point[0] for point in self.recent_gaze) / len(self.recent_gaze)
         y = sum(point[1] for point in self.recent_gaze) / len(self.recent_gaze)
@@ -164,6 +191,10 @@ class GazetypeController:
             self.toggle_keyboard()
             return
         if not self.keyboard_enabled or eyes_closed:
+            return
+        if frame.timestamp_ms < self.head_motion_until_ms:
+            self.landing.cancel_candidate()
+            self.overlay.set_gaze_state(None, 0.0, frame.fps, (x, y))
             return
         key = self.overlay.keyboard.hit_test(x, y)
         selected = self.landing.update(GazePoint(frame.timestamp_ms, x, y), key.id if key else None)
@@ -184,6 +215,7 @@ class GazetypeController:
         self.overlay.face_present = present
         if not present:
             self.recent_gaze.clear()
+            self.previous_head_sample = None
             self.landing.reset()
             self.blink.reset()
             self.overlay.set_gaze_state(None, 0.0, 0.0, None)
@@ -202,6 +234,8 @@ class GazetypeController:
         self.keyboard_enabled = not self.keyboard_enabled
         self.landing.reset()
         self.recent_gaze.clear()
+        self.previous_head_sample = None
+        self.head_motion_until_ms = 0
         self.blink.reset()
         self.toggle.set_enabled(self.keyboard_enabled)
         if self.keyboard_enabled:

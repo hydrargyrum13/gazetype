@@ -289,8 +289,9 @@ class CalibrationWindow(QWidget):
         self.setCursor(Qt.BlankCursor)
         self._target_index = 0
         self._target_started_ms: int | None = None
-        self._samples: list[tuple[float, float, float, float]] = []
-        self._collected: list[tuple[float, float, float, float]] = []
+        self._samples: list[tuple[float, ...]] = []
+        self._collected: list[tuple[float, ...]] = []
+        self._collected_targets: list[tuple[float, float]] = []
         self._face_present = False
         self._targets = CALIBRATION_TARGETS
         self._keyboard: KeyboardGeometry | None = None
@@ -303,6 +304,7 @@ class CalibrationWindow(QWidget):
         self._target_started_ms = None
         self._samples.clear()
         self._collected.clear()
+        self._collected_targets.clear()
         self.show()
         self.raise_()
         self.update()
@@ -314,7 +316,7 @@ class CalibrationWindow(QWidget):
             self._samples.clear()
         self.update()
 
-    def add_sample(self, timestamp_ms: int, features: tuple[float, float, float, float]) -> None:
+    def add_sample(self, timestamp_ms: int, features: tuple[float, ...]) -> None:
         if not self.isVisible() or not self._face_present:
             return
         self._target_started_ms = timestamp_ms
@@ -323,16 +325,25 @@ class CalibrationWindow(QWidget):
             self._samples.pop(0)
 
     def mousePressEvent(self, event) -> None:
-        if event.button() != Qt.LeftButton or not self._face_present or not self._samples:
+        if event.button() != Qt.LeftButton or not self._face_present or len(self._samples) < 4:
             return
-        median = tuple(float(value) for value in np.median(np.asarray(self._samples), axis=0))
-        self._collected.append(median)
+        samples = np.asarray(self._samples, dtype=np.float64)
+        median = np.median(samples, axis=0)
+        deviation = np.median(np.abs(samples - median), axis=0)
+        normalized = np.abs(samples - median) / np.maximum(deviation, 1e-4)
+        clean = samples[np.max(normalized, axis=1) <= 4.0]
+        if len(clean) < 4:
+            clean = samples
+        selected = clean[-8:]
+        target = self._targets[self._target_index]
+        self._collected.extend(tuple(float(value) for value in row) for row in selected)
+        self._collected_targets.extend([target] * len(selected))
         self._samples.clear()
         self._target_started_ms = None
         self._target_index += 1
         if self._target_index >= len(self._targets):
             self.hide()
-            self.completed.emit(tuple(self._collected), self._targets)
+            self.completed.emit(tuple(self._collected), tuple(self._collected_targets))
         else:
             self.update()
 
@@ -370,7 +381,7 @@ class CalibrationWindow(QWidget):
             painter.drawText(
                 QRectF(0, self.height() * 0.43, self.width(), 50),
                 Qt.AlignCenter,
-                f"Noktaya bakın ve herhangi bir yere tıklayın  •  "
+                f"Noktaya bakın, başınızı hafifçe oynatın ve tıklayın  •  "
                 f"{self._target_index + 1}/{len(self._targets)}",
             )
             painter.setPen(COLORS["muted"])

@@ -51,6 +51,12 @@ class AppSettings:
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "AppSettings":
         calibration_data = data.get("calibration")
+        calibration = None
+        if isinstance(calibration_data, dict):
+            try:
+                calibration = CalibrationModel.from_dict(calibration_data)
+            except (KeyError, TypeError, ValueError):
+                calibration = None
         return cls(
             camera_index=int(data.get("camera_index", 0)),
             screen_name=str(data.get("screen_name", "")),
@@ -62,11 +68,7 @@ class AppSettings:
             ),
             calibration_mode=str(data.get("calibration_mode", "grid")),
             gaze_average_count=int(data.get("gaze_average_count", 3)),
-            calibration=(
-                CalibrationModel.from_dict(calibration_data)
-                if isinstance(calibration_data, dict)
-                else None
-            ),
+            calibration=calibration,
         )
 
 

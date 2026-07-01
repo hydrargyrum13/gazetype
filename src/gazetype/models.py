@@ -40,8 +40,7 @@ class GazePoint:
 @dataclass(frozen=True, slots=True)
 class VisionFrame:
     timestamp_ms: int
-    features: tuple[float, float, float, float]
+    features: tuple[float, ...]
     blink_left: float
     blink_right: float
     fps: float
-

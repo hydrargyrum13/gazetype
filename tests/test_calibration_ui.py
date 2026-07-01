@@ -20,7 +20,7 @@ def test_calibration_window_collects_all_twenty_five_points() -> None:
 
     timestamp = 0
     for target_index in range(len(CALIBRATION_TARGETS)):
-        features = (target_index / 25, 0.5, 0.0, 0.0)
+        features = (target_index / 25, 0.5, target_index / 25, 0.5, 0.0, 0.0, 0.0, 0.3)
         window.add_sample(timestamp, features)
         for sample_index in range(10):
             window.add_sample(timestamp + 201 + sample_index * 33, features)
@@ -29,7 +29,9 @@ def test_calibration_window_collects_all_twenty_five_points() -> None:
 
     assert len(completed) == 1
     features, targets = completed[0]
-    assert len(features) == 25
-    assert targets == CALIBRATION_TARGETS
+    assert len(features) == 200
+    assert len(targets) == 200
+    assert targets[0] == CALIBRATION_TARGETS[0]
+    assert targets[-1] == CALIBRATION_TARGETS[-1]
     assert not window.isVisible()
     assert application is not None

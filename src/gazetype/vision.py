@@ -30,8 +30,8 @@ def _normalized(value: float, first: float, second: float) -> float:
     return (value - low) / max(high - low, 1e-6)
 
 
-def extract_gaze_features(landmarks: object) -> tuple[float, float, float, float]:
-    """Extract iris position and coarse head offset from 478 face landmarks."""
+def extract_gaze_features(landmarks: object) -> tuple[float, ...]:
+    """Extract binocular gaze plus translation, roll and distance-aware head pose."""
     points = landmarks
     left_iris_x = float(np.mean([points[index].x for index in range(468, 473)]))
     left_iris_y = float(np.mean([points[index].y for index in range(468, 473)]))
@@ -43,16 +43,27 @@ def extract_gaze_features(landmarks: object) -> tuple[float, float, float, float
     left_y = _normalized(left_iris_y, points[159].y, points[145].y)
     right_y = _normalized(right_iris_y, points[386].y, points[374].y)
 
-    eye_mid_x = (points[33].x + points[263].x) / 2
-    eye_mid_y = (points[159].y + points[386].y) / 2
-    eye_distance = max(abs(points[263].x - points[33].x), 1e-6)
+    left_center_x = (points[33].x + points[133].x) / 2
+    left_center_y = (points[159].y + points[145].y) / 2
+    right_center_x = (points[362].x + points[263].x) / 2
+    right_center_y = (points[386].y + points[374].y) / 2
+    eye_mid_x = (left_center_x + right_center_x) / 2
+    eye_mid_y = (left_center_y + right_center_y) / 2
+    eye_dx = right_center_x - left_center_x
+    eye_dy = right_center_y - left_center_y
+    eye_distance = max(float(np.hypot(eye_dx, eye_dy)), 1e-6)
     head_x = (points[1].x - eye_mid_x) / eye_distance
     head_y = (points[1].y - eye_mid_y) / eye_distance
+    roll = float(np.arctan2(eye_dy, eye_dx))
     return (
-        float(np.clip((left_x + right_x) / 2, -0.5, 1.5)),
-        float(np.clip((left_y + right_y) / 2, -0.5, 1.5)),
+        float(np.clip(left_x, -0.5, 1.5)),
+        float(np.clip(left_y, -0.5, 1.5)),
+        float(np.clip(right_x, -0.5, 1.5)),
+        float(np.clip(right_y, -0.5, 1.5)),
         float(np.clip(head_x, -1.0, 1.0)),
         float(np.clip(head_y, -1.0, 1.0)),
+        float(np.clip(roll, -0.8, 0.8)),
+        float(np.clip(eye_distance, 0.05, 0.8)),
     )
 
 
@@ -135,6 +146,12 @@ class CameraWorker(QThread):
                             iris_y = int(np.mean([points[index].y for index in iris_range]) * height)
                             cv2.circle(image, (iris_x, iris_y), 6, (255, 255, 255), 2, cv2.LINE_AA)
                             cv2.circle(image, (iris_x, iris_y), 2, eye_color, -1, cv2.LINE_AA)
+                        eye_mid = (
+                            int((points[33].x + points[263].x) * 0.5 * width),
+                            int((points[159].y + points[386].y) * 0.5 * height),
+                        )
+                        nose = (int(points[1].x * width), int(points[1].y * height))
+                        cv2.arrowedLine(image, eye_mid, nose, (255, 190, 70), 2, cv2.LINE_AA)
                         xs = [point.x for point in points[:468]]
                         ys = [point.y for point in points[:468]]
                         top_left = (int(min(xs) * width), int(min(ys) * height))

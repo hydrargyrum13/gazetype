@@ -38,3 +38,14 @@ def test_keyboard_calibration_mode_is_persisted() -> None:
     settings = AppSettings(calibration_mode="keyboard")
     assert AppSettings.from_dict(settings.to_dict()).calibration_mode == "keyboard"
     assert AppSettings(calibration_mode="unknown").calibration_mode == "grid"
+
+
+def test_outdated_calibration_does_not_reset_other_settings() -> None:
+    settings = AppSettings.from_dict({
+        "camera_index": 2,
+        "gaze_average_count": 9,
+        "calibration": {"model_version": 2, "coefficients": []},
+    })
+    assert settings.camera_index == 2
+    assert settings.gaze_average_count == 9
+    assert settings.calibration is None
