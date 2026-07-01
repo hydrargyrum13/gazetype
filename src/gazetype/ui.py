@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -137,7 +138,11 @@ class SettingsWindow(QMainWindow):
             camera_grid.addWidget(card, index // 2, index % 2)
         layout.addLayout(camera_grid)
 
-        form = QFormLayout()
+        self.settings_tabs = QTabWidget()
+        settings_page = QWidget()
+        advanced_settings_page = QWidget()
+        form = QFormLayout(settings_page)
+        advanced_form = QFormLayout(advanced_settings_page)
 
         self.screen_combo = QComboBox()
         self.layout_combo = QComboBox()
@@ -193,14 +198,16 @@ class SettingsWindow(QMainWindow):
         form.addRow("Hassasiyet", self.sensitivity_combo)
         form.addRow("Kalibrasyon modu", self.calibration_mode)
         form.addRow("Izgara noktaları", self.point_count)
-        form.addRow("Bakış ortalaması", self.gaze_average_count)
-        form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
-        form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
-        form.addRow("Dikey ofset (-8–+8 dengeli)", self.vertical_offset)
-        form.addRow("Kafa telafisi (80–120 dengeli)", self.head_compensation)
-        form.addRow("Kafa eşiği (80–130 dengeli)", self.head_motion_threshold)
+        advanced_form.addRow("Bakış ortalaması", self.gaze_average_count)
+        advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
+        advanced_form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
+        advanced_form.addRow("Dikey ofset (-8–+8 dengeli)", self.vertical_offset)
+        advanced_form.addRow("Kafa telafisi (80–120 dengeli)", self.head_compensation)
+        advanced_form.addRow("Kafa eşiği (80–130 dengeli)", self.head_motion_threshold)
         self.point_count.setEnabled(self.calibration_mode.currentData() == "grid")
-        layout.addLayout(form)
+        self.settings_tabs.addTab(settings_page, "Ayarlar")
+        self.settings_tabs.addTab(advanced_settings_page, "Gelişmiş Ayarlar")
+        layout.addWidget(self.settings_tabs)
 
         self.status = QLabel("Hazır")
         self.status.setWordWrap(True)

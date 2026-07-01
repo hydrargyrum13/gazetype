@@ -18,6 +18,10 @@ def test_camera_preview_cards_select_camera() -> None:
     assert window.selected_camera_index == 3
     assert window.camera_cards[3].isChecked()
     assert not window.camera_cards[1].isChecked()
+    assert window.settings_tabs.count() == 2
+    assert window.settings_tabs.tabText(0) == "Ayarlar"
+    assert window.settings_tabs.tabText(1) == "Gelişmiş Ayarlar"
+    assert window.settings_tabs.currentIndex() == 0
     window.calibration_mode.setCurrentIndex(1)
     assert window.calibration_mode.currentData() == "keyboard"
     assert not window.point_count.isEnabled()
