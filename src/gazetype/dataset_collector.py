@@ -33,6 +33,12 @@ class ScreenGeometry:
         return f"{self.x},{self.y},{self.width},{self.height}"
 
 
+@dataclass(frozen=True, slots=True)
+class MovingTargetRoute:
+    x_terms: tuple[tuple[float, float, float], ...]
+    y_terms: tuple[tuple[float, float, float], ...]
+
+
 def normalized_target_for_position(
     position: QPoint,
     geometry: ScreenGeometry,
@@ -42,9 +48,40 @@ def normalized_target_for_position(
     return max(0.0, min(float(x), 1.0)), max(0.0, min(float(y), 1.0))
 
 
-def moving_target_at_time(elapsed_seconds: float) -> tuple[float, float]:
-    x = 0.5 + 0.43 * np.sin(elapsed_seconds * 0.73)
-    y = 0.5 + 0.39 * np.sin(elapsed_seconds * 1.07 + 0.8)
+def create_moving_target_route(seed: int | None = None) -> MovingTargetRoute:
+    rng = random.Random(seed) if seed is not None else random.Random(time.time_ns())
+    x_terms = tuple(
+        (
+            rng.uniform(0.10, 0.24),
+            rng.uniform(0.18, 0.95),
+            rng.uniform(0.0, np.pi * 2),
+        )
+        for _ in range(3)
+    )
+    y_terms = tuple(
+        (
+            rng.uniform(0.10, 0.23),
+            rng.uniform(0.22, 1.05),
+            rng.uniform(0.0, np.pi * 2),
+        )
+        for _ in range(3)
+    )
+    return MovingTargetRoute(x_terms, y_terms)
+
+
+def moving_target_at_time(
+    elapsed_seconds: float,
+    route: MovingTargetRoute | None = None,
+) -> tuple[float, float]:
+    route = route or create_moving_target_route(13)
+    x = 0.5 + sum(
+        amplitude * np.sin(elapsed_seconds * frequency + phase)
+        for amplitude, frequency, phase in route.x_terms
+    )
+    y = 0.5 + sum(
+        amplitude * np.sin(elapsed_seconds * frequency + phase)
+        for amplitude, frequency, phase in route.y_terms
+    )
     return float(np.clip(x, 0.04, 0.96)), float(np.clip(y, 0.05, 0.95))
 
 
@@ -60,6 +97,8 @@ class MouseDatasetCollector(QWidget):
         moving_target: bool = False,
         duration_seconds: int = 90,
         reaction_lag_ms: int = 250,
+        countdown_seconds: int = 3,
+        route: MovingTargetRoute | None = None,
     ):
         super().__init__()
         self.camera_index = camera_index
@@ -81,6 +120,8 @@ class MouseDatasetCollector(QWidget):
         self.moving_target = moving_target
         self.duration_seconds = max(10, duration_seconds)
         self.reaction_lag_ms = max(0, reaction_lag_ms)
+        self.countdown_seconds = max(0, countdown_seconds)
+        self.route = route or create_moving_target_route()
         self.started_at = time.perf_counter()
         self.target_history: deque[tuple[float, tuple[float, float]]] = deque(maxlen=300)
         self.current_target: tuple[float, float] | None = None
@@ -112,13 +153,18 @@ class MouseDatasetCollector(QWidget):
         if not self.moving_target:
             self.update()
             return
-        elapsed = time.perf_counter() - self.started_at
+        elapsed = time.perf_counter() - self.started_at - self.countdown_seconds
+        if elapsed < 0:
+            self.current_target = moving_target_at_time(0.0, self.route)
+            self.status = "Hazirlan"
+            self.update()
+            return
         if elapsed >= self.duration_seconds:
             self.status = f"Bitti: {self.sample_count} ornek"
             self.update()
             self.close()
             return
-        self.current_target = moving_target_at_time(elapsed)
+        self.current_target = moving_target_at_time(elapsed, self.route)
         self.target_history.append((time.perf_counter(), self.current_target))
         self.status = f"Takip et - {self.sample_count} frame"
         self.update()
@@ -127,11 +173,14 @@ class MouseDatasetCollector(QWidget):
         self.latest_frame = frame
         if self.face_present:
             self.frame_buffer.append(frame)
-            if self.moving_target:
+            if self.moving_target and self.moving_elapsed_seconds() >= 0:
                 self.capture_lagged_moving_frame(frame)
         if self.face_present and not self.moving_target:
             self.status = f"Hazir - FPS {frame.fps:.1f}"
         self.update()
+
+    def moving_elapsed_seconds(self) -> float:
+        return time.perf_counter() - self.started_at - self.countdown_seconds
 
     def lagged_target(self) -> tuple[float, float] | None:
         if not self.target_history:
@@ -255,6 +304,11 @@ class MouseDatasetCollector(QWidget):
             painter.drawEllipse(QPoint(x, y), 18, 18)
             painter.setBrush(QColor(255, 255, 255, 245))
             painter.drawEllipse(QPoint(x, y), 5, 5)
+            remaining = int(np.ceil(-self.moving_elapsed_seconds()))
+            if remaining > 0:
+                painter.setPen(QColor(246, 248, 252, 245))
+                painter.setFont(QFont("Segoe UI", 92, QFont.Weight.Bold))
+                painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, str(remaining))
             return
         if self.guided_targets and self.guided_index < len(self.guided_targets):
             target = self.guided_targets[self.guided_index]
@@ -288,7 +342,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-count", type=int, default=120)
     parser.add_argument("--duration-seconds", type=int, default=90)
     parser.add_argument("--reaction-lag-ms", type=int, default=250)
-    parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--countdown-seconds", type=int, default=3)
+    parser.add_argument("--seed", type=int)
     parser.add_argument(
         "--classic-eye-ratio",
         action="store_true",
@@ -316,7 +371,7 @@ def main() -> int:
         raise SystemExit("Ekran bulunamadi.")
     screen_index = max(0, min(args.screen_index, len(screens) - 1))
     geometry = ScreenGeometry.from_rect(screens[screen_index].geometry())
-    guided_targets = guided_target_sequence(args.target_count, args.seed) if args.guided else ()
+    guided_targets = guided_target_sequence(args.target_count, args.seed or 13) if args.guided else ()
     collector = MouseDatasetCollector(
         args.camera_index,
         args.out,
@@ -327,6 +382,8 @@ def main() -> int:
         args.moving,
         args.duration_seconds,
         args.reaction_lag_ms,
+        args.countdown_seconds,
+        create_moving_target_route(args.seed),
     )
     collector.showFullScreen()
     return application.exec()
