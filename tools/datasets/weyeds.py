@@ -11,6 +11,7 @@ FEATURE_COLUMNS = tuple(f"feature_{index}" for index in range(10))
 MANIFEST_NAMES = (
     "gazetype_manifest.csv",
     "gazetype_manifest.jsonl",
+    "mpiigaze_gazetype_manifest.jsonl",
     "manifest.csv",
     "manifest.jsonl",
     "samples.csv",
