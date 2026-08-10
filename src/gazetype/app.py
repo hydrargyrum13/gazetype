@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from math import sqrt
 
+import numpy as np
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
@@ -96,6 +97,58 @@ def adaptive_gaze_point(
         previous[0] + alpha * (current[0] - previous[0]),
         previous[1] + alpha * (current[1] - previous[1]),
     )
+
+
+def _mean_prediction_error(
+    predictions: list[tuple[float, float]],
+    targets: np.ndarray,
+) -> float:
+    return float(np.mean(np.linalg.norm(np.asarray(predictions) - targets, axis=1)))
+
+
+def validated_calibration_adapter(
+    general,
+    features,
+    targets,
+    robust: bool,
+    improvement_margin: float = 0.95,
+) -> CalibrationAdapterModel | None:
+    feature_array = np.asarray(tuple(features), dtype=np.float64)
+    target_array = np.asarray(tuple(targets), dtype=np.float64)
+    if len(feature_array) < 45:
+        base_predictions = [general.predict(tuple(feature)) for feature in feature_array]
+        return CalibrationAdapterModel.fit(base_predictions, feature_array, target_array)
+
+    validation_mask = np.zeros(len(feature_array), dtype=bool)
+    validation_mask[::5] = True
+    training_features = feature_array[~validation_mask]
+    training_targets = target_array[~validation_mask]
+    validation_features = feature_array[validation_mask]
+    validation_targets = target_array[validation_mask]
+    if len(training_features) < 20 or len(validation_features) < 4:
+        return None
+
+    baseline = CalibrationModel.fit(training_features, training_targets, robust=robust)
+    train_base_predictions = [general.predict(tuple(feature)) for feature in training_features]
+    adapter = CalibrationAdapterModel.fit(
+        train_base_predictions, training_features, training_targets
+    )
+    baseline_error = _mean_prediction_error(
+        [baseline.predict(tuple(feature)) for feature in validation_features],
+        validation_targets,
+    )
+    adapter_error = _mean_prediction_error(
+        [
+            adapter.predict(general.predict(tuple(feature)), tuple(feature))
+            for feature in validation_features
+        ],
+        validation_targets,
+    )
+    if adapter_error > baseline_error * improvement_margin:
+        return None
+
+    all_base_predictions = [general.predict(tuple(feature)) for feature in feature_array]
+    return CalibrationAdapterModel.fit(all_base_predictions, feature_array, target_array)
 
 
 class GazetypeController:
@@ -240,9 +293,11 @@ class GazetypeController:
                     configured_general_model_path(self.settings.general_gaze_model_path)
                 )
                 if general is not None:
-                    base_predictions = [general.predict(tuple(feature)) for feature in features]
-                    self.settings.calibration_adapter = CalibrationAdapterModel.fit(
-                        base_predictions, features, targets
+                    self.settings.calibration_adapter = validated_calibration_adapter(
+                        general,
+                        features,
+                        targets,
+                        self.settings.robust_calibration,
                     )
             self.store.save(self.settings)
             self._refresh_gaze_predictor()
