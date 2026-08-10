@@ -114,13 +114,21 @@ Linux'ta varsayılan kayıt klasörü `~/.local/share/gazetype` olduğu için e�
 komutu şu şekilde çalıştırılabilir:
 
 ```bash
-python -m tools.train_gaze_model --dataset weyeds --data-dir ~/.local/share/gazetype --out models/personal_general.npz --polynomial-degree 2
+python -m gazetype.dataset_collector --camera-index 0 --guided --target-count 180 --out ~/.local/share/gazetype/gazetype_manifest.jsonl
+python -m tools.train_gaze_model --dataset weyeds --data-dir ~/.local/share/gazetype --out models/personal_general.npz --polynomial-degree 1
 GAZETYPE_GENERAL_MODEL=models/personal_general.npz python -m gazetype
 ```
 
 Uygulamada gelişmiş ayarlardan "Genel gaze modelini kullan" seçeneğini açıp
 "Kişisel Modelle Başlat" düğmesine basarsanız, eğitilmiş `.npz` model doğrudan
 kalibrasyon objesi olmadan kullanılır.
+
+İyi sonuç için her kafa/oturuş pozisyonunda guided hedeflerin tamamını veya
+geniş bir kısmını dolaşın. Sadece belirli ekran bölgelerini belirli kafa
+pozisyonlarında toplamak modelin hedef yerine kafa pozisyonunu öğrenmesine yol
+açabilir. Collector varsayılan olarak her hedef için son birkaç kamera frame'ini
+yazar; acele tıklamak yerine hedefe kısa süre bakıp sonra Space veya sol tık ile
+kaydetmek daha temiz veri üretir.
 
 ### WEyeDS support
 
