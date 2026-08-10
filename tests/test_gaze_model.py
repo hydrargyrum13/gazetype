@@ -2,7 +2,7 @@ import numpy as np
 
 from gazetype.app import validated_calibration_adapter
 from gazetype.calibration import CalibrationAdapterModel, CalibrationModel
-from gazetype.gaze_model import build_runtime_predictor
+from gazetype.gaze_model import build_direct_general_predictor, build_runtime_predictor
 
 
 def _features(count: int = 25) -> np.ndarray:
@@ -25,6 +25,25 @@ def test_general_model_missing_falls_back_to_calibration(tmp_path) -> None:
         adapter,
     )
     assert np.allclose(predictor.predict(tuple(features[8])), calibration.predict(features[8]))
+
+
+def test_direct_general_model_loads_npz_predictor(tmp_path) -> None:
+    model_path = tmp_path / "personal.npz"
+    np.savez(
+        model_path,
+        mean=np.zeros(10),
+        std=np.ones(10),
+        weights=np.asarray([
+            (0.25, 0.75),
+            *((0.0, 0.0) for _ in range(10)),
+        ]),
+        polynomial_degree=np.asarray(1, dtype=np.int64),
+    )
+
+    predictor = build_direct_general_predictor(True, str(model_path))
+
+    assert predictor is not None
+    assert predictor.predict((0.0,) * 10) == (0.25, 0.75)
 
 
 class ConstantPredictor:
