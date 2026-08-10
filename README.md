@@ -101,8 +101,9 @@ dağıtılmaz.
 
 Gazetype WEyeDS'i otomatik indirmez. Yerel datasetinizi normalize edilmiş bir
 ara manifest formatına dönüştürmeniz gerekir. `tools/datasets/weyeds.py` dataset
-klasöründe `gazetype_manifest.csv`, `gazetype_manifest.jsonl`, `manifest.csv`,
-`manifest.jsonl`, `samples.csv` veya `samples.jsonl` arar.
+klasöründe `gazetype_manifest.csv`, `gazetype_manifest.jsonl`,
+`mpiigaze_gazetype_manifest.jsonl`, `manifest.csv`, `manifest.jsonl`,
+`samples.csv` veya `samples.jsonl` arar.
 
 Kabul edilen alanlar:
 
@@ -113,6 +114,21 @@ Kabul edilen alanlar:
 
 İlk baseline trainer ham görüntüden MediaPipe feature çıkarmaz; manifestte
 önceden çıkarılmış 10 Gazetype gaze feature'ı bekler.
+
+### MPIIGaze local conversion
+
+MPIIGaze indirildikten ve yerelde açıldıktan sonra raw görüntülerden Gazetype
+feature manifest'i üretilebilir:
+
+```powershell
+python -m tools.build_mpiigaze_manifest --data-dir data\MPIIGaze --out data\mpiigaze_gazetype_manifest.jsonl --limit 30000 --eye left --auto-range
+python -m tools.train_gaze_model --dataset weyeds --data-dir data --out models\mpiigaze_general.npz --polynomial-degree 2
+```
+
+MPIIGaze doğrudan ekran `target_x/target_y` etiketi vermez; gaze vector
+değerleri pseudo screen target'a dönüştürülür. Bu nedenle MPIIGaze modeli genel
+başlangıç noktasıdır, gerçek kullanımda kişisel kalibrasyon adapter'ı ile
+düzeltilmelidir.
 
 ## Gizlilik
 
