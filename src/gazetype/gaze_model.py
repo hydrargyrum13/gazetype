@@ -115,3 +115,12 @@ def build_runtime_predictor(
         if general is not None:
             return AdapterPredictor(general, adapter, fallback=calibration)
     return CalibrationPredictor(calibration)
+
+
+def build_direct_general_predictor(
+    use_general_model: bool,
+    model_path: str,
+) -> GazePredictor | None:
+    if not use_general_model:
+        return None
+    return load_general_predictor(configured_general_model_path(model_path))
