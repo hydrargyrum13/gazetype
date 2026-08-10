@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 from gazetype.blink import DeliberateBlinkDetector
 from gazetype.calibration import CalibrationAdapterModel, CalibrationModel, calibration_targets
 from gazetype.gaze_model import (
+    build_direct_general_predictor,
     build_runtime_predictor,
     configured_general_model_path,
     load_general_predictor,
@@ -173,10 +174,12 @@ class GazetypeController:
         self.previous_head_sample: tuple[int, tuple[float, ...]] | None = None
         self.head_motion_until_ms = 0
         self.gaze_predictor = None
+        self.direct_general_model = False
         if self.settings.calibration is not None:
             self._refresh_gaze_predictor()
 
         self.settings_window.start_requested.connect(self.begin_calibration)
+        self.settings_window.model_start_requested.connect(self.begin_general_model)
         self.calibration_window.completed.connect(self.finish_calibration)
         self.calibration_window.cancelled.connect(self.cancel_calibration)
         self.toggle.toggled.connect(self.toggle_keyboard)
@@ -213,6 +216,7 @@ class GazetypeController:
         self.tray.show()
 
     def begin_calibration(self, values: dict[str, object]) -> None:
+        self.direct_general_model = False
         screens = self.application.screens()
         screen_index = int(values["screen_index"])
         if screen_index >= len(screens):
@@ -282,6 +286,82 @@ class GazetypeController:
         )
         self.calibration_window.begin(self.screen, targets, calibration_keyboard, training_writer)
 
+    def begin_general_model(self, values: dict[str, object]) -> None:
+        screens = self.application.screens()
+        screen_index = int(values["screen_index"])
+        if screen_index >= len(screens):
+            self.settings_window.set_status("Seçilen ekran artık bağlı değil.", True)
+            self.settings_window.unlock()
+            self._refresh_screens()
+            return
+        use_general_model = bool(values["use_general_gaze_model"])
+        if not use_general_model:
+            self.settings_window.set_status("Kişisel model için genel model ayarını açın.", True)
+            self.settings_window.unlock()
+            return
+        predictor = build_direct_general_predictor(
+            use_general_model,
+            self.settings.general_gaze_model_path,
+        )
+        if predictor is None:
+            self.settings_window.set_status(
+                "Model bulunamadı. GAZETYPE_GENERAL_MODEL ile .npz dosyasını gösterin.",
+                True,
+            )
+            self.settings_window.unlock()
+            return
+        self.screen = screens[screen_index]
+        self.settings = AppSettings(
+            camera_index=int(values["camera_index"]),
+            screen_name=str(values["screen_name"]),
+            screen_geometry=str(values["screen_geometry"]),
+            layout=KeyboardLayout(str(values["layout"])),
+            sensitivity=Sensitivity(str(values["sensitivity"])),
+            calibration_point_count=int(values["calibration_point_count"]),
+            calibration_mode=str(values["calibration_mode"]),
+            gaze_average_count=int(values["gaze_average_count"]),
+            auto_gaze_gain=False,
+            quadrilateral_eye_mapping=bool(values["quadrilateral_eye_mapping"]),
+            binocular_stabilization=False,
+            adaptive_gaze_filter=bool(values["adaptive_gaze_filter"]),
+            robust_calibration=bool(values["robust_calibration"]),
+            use_general_gaze_model=True,
+            general_gaze_model_path=self.settings.general_gaze_model_path,
+            collect_training_samples=bool(values["collect_training_samples"]),
+            collect_training_images=self.settings.collect_training_images,
+            horizontal_gain_percent=int(values["horizontal_gain_percent"]),
+            vertical_gain_percent=int(values["vertical_gain_percent"]),
+            vertical_offset_percent=int(values["vertical_offset_percent"]),
+            head_compensation_percent=100,
+            head_motion_threshold_percent=int(values["head_motion_threshold_percent"]),
+            calibration=self.settings.calibration,
+            calibration_adapter=self.settings.calibration_adapter,
+        )
+        self.direct_general_model = True
+        self.gaze_predictor = predictor
+        self.recent_gaze = deque(maxlen=self.settings.gaze_average_count)
+        self.filtered_gaze = None
+        self.tracking_window.configure_tuning(self.settings)
+        self.previous_head_sample = None
+        self.head_motion_until_ms = 0
+        self.landing = LandingDetector(SENSITIVITY_PROFILES[self.settings.sensitivity])
+        self._stop_worker()
+        self.worker = CameraWorker(
+            self.settings.camera_index, self.settings.quadrilateral_eye_mapping
+        )
+        self.worker.frame_ready.connect(self.on_vision_frame)
+        self.worker.tracking_preview.connect(self.tracking_window.set_frame)
+        self.worker.face_presence.connect(self.on_face_presence)
+        self.worker.error.connect(self.on_camera_error)
+        self.worker.start()
+        self.overlay.configure(self.screen, self.settings.layout)
+        self.toggle.place(self.screen)
+        self.keyboard_enabled = False
+        self.toggle.set_enabled(False)
+        self.tracking_window.show()
+        self.settings_window.showMinimized()
+        self.settings_window.unlock()
+
     def finish_calibration(self, features, targets) -> None:
         try:
             self.settings.calibration = CalibrationModel.fit(
@@ -328,24 +408,25 @@ class GazetypeController:
         if self.calibration_window.isVisible():
             self.calibration_window.add_sample(frame.timestamp_ms, frame.features)
             return
-        model = self.settings.calibration
-        if model is None or self.screen is None:
+        model = None if self.direct_general_model else self.settings.calibration
+        if self.screen is None:
             return
         compensated_features = list(frame.features)
-        compensation = self.settings.head_compensation_percent / 100.0
-        for index in range(4, len(compensated_features)):
-            baseline = model.feature_mean[index]
-            compensated_features[index] = baseline + (
-                compensated_features[index] - baseline
-            ) * compensation
-        if self.settings.binocular_stabilization:
+        if model is not None:
+            compensation = self.settings.head_compensation_percent / 100.0
+            for index in range(4, len(compensated_features)):
+                baseline = model.feature_mean[index]
+                compensated_features[index] = baseline + (
+                    compensated_features[index] - baseline
+                ) * compensation
+        if model is not None and self.settings.binocular_stabilization:
             compensated_features = stabilize_binocular_features(compensated_features, model)
         if self.gaze_predictor is None:
             self._refresh_gaze_predictor()
         if self.gaze_predictor is None:
             return
         x, y = self.gaze_predictor.predict(tuple(compensated_features))
-        if self.settings.auto_gaze_gain:
+        if model is not None and self.settings.auto_gaze_gain:
             horizontal_gain, vertical_gain = eye_ratio_gains(model)
         else:
             horizontal_gain = float(self.settings.horizontal_gain_percent)
@@ -418,6 +499,12 @@ class GazetypeController:
             self.store.save(self.settings)
 
     def _refresh_gaze_predictor(self) -> None:
+        if self.direct_general_model:
+            self.gaze_predictor = build_direct_general_predictor(
+                self.settings.use_general_gaze_model,
+                self.settings.general_gaze_model_path,
+            )
+            return
         if self.settings.calibration is None:
             self.gaze_predictor = None
             return
@@ -437,7 +524,7 @@ class GazetypeController:
         show_error(self.settings_window, "Kamera hatası", message)
 
     def toggle_keyboard(self) -> None:
-        if self.settings.calibration is None or self.screen is None:
+        if (self.settings.calibration is None and not self.direct_general_model) or self.screen is None:
             return
         self.keyboard_enabled = not self.keyboard_enabled
         self.landing.reset()
