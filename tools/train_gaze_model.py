@@ -6,9 +6,9 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from tools.datasets import weyeds
+    from tools.datasets import mpiigaze, weyeds
 except ModuleNotFoundError:
-    from datasets import weyeds
+    from datasets import mpiigaze, weyeds
 
 
 def _design(features: np.ndarray, polynomial_degree: int) -> np.ndarray:
@@ -52,10 +52,11 @@ def fit_ridge(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a local Gazetype general gaze model.")
-    parser.add_argument("--dataset", choices=("weyeds",), default="weyeds")
+    parser.add_argument("--dataset", choices=("weyeds", "mpiigaze"), default="weyeds")
     parser.add_argument("--data-dir", type=Path, help="Local dataset directory with a normalized manifest.")
     parser.add_argument("--out", type=Path, default=Path("models/gazetype_general.npz"))
     parser.add_argument("--quick", action="store_true", help="Run a small synthetic smoke training job.")
+    parser.add_argument("--summarize", action="store_true", help="Inspect a dataset without training.")
     parser.add_argument("--ridge", type=float, default=1e-2)
     parser.add_argument("--polynomial-degree", type=int, choices=(1, 2), default=1)
     return parser.parse_args()
@@ -68,8 +69,22 @@ def main() -> int:
     else:
         if args.data_dir is None:
             raise SystemExit("--data-dir is required unless --quick is used")
+        if args.summarize:
+            if args.dataset == "mpiigaze":
+                print(mpiigaze.summarize(args.data_dir))
+                return 0
+            if args.dataset == "weyeds":
+                samples = weyeds.load_dataset(args.data_dir)
+                print({"sample_count": len(samples)})
+                return 0
         if args.dataset == "weyeds":
             sample_features, sample_targets = weyeds.arrays(weyeds.load_dataset(args.data_dir))
+        elif args.dataset == "mpiigaze":
+            raise SystemExit(
+                "MPIIGaze is downloaded and readable, but it does not contain Gazetype's "
+                "10 runtime features or screen target_x/target_y labels directly. Build a "
+                "Gazetype normalized manifest from raw images before training."
+            )
         else:
             raise SystemExit(f"Unsupported dataset: {args.dataset}")
         features = np.asarray(sample_features, dtype=np.float64)
