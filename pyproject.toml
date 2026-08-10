@@ -26,6 +26,7 @@ dev = [
 
 [project.scripts]
 gazetype = "gazetype.app:main"
+gazetype-collect-mouse = "gazetype.dataset_collector:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
