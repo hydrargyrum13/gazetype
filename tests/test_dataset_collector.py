@@ -3,6 +3,7 @@ from PySide6.QtCore import QPoint
 from gazetype.dataset_collector import (
     ScreenGeometry,
     guided_target_sequence,
+    moving_target_at_time,
     normalized_target_for_position,
 )
 
@@ -29,3 +30,10 @@ def test_guided_target_sequence_covers_screen_area() -> None:
     assert max(xs) >= 0.94
     assert min(ys) <= 0.07
     assert max(ys) >= 0.93
+
+
+def test_moving_target_at_time_stays_inside_screen() -> None:
+    for seconds in (0.0, 3.5, 12.0, 44.0):
+        x, y = moving_target_at_time(seconds)
+        assert 0.04 <= x <= 0.96
+        assert 0.05 <= y <= 0.95
