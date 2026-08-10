@@ -8,10 +8,12 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -110,17 +112,18 @@ class CameraPreviewCard(QPushButton):
 class SettingsWindow(QMainWindow):
     start_requested = Signal(object)
     model_start_requested = Signal(object)
+    dataset_requested = Signal(object, bool)
 
     def __init__(self, settings: AppSettings):
         super().__init__()
         self.setWindowTitle("Gazetype")
-        self.setMinimumSize(520, 620)
+        self.setMinimumSize(540, 680)
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         title = QLabel("Gazetype")
         title.setStyleSheet("font-size: 28px; font-weight: 700;")
-        subtitle = QLabel("Gözle yazma klavyesini kalibre edin ve başlatın.")
+        subtitle = QLabel("Kalibrasyon, kişisel model ve veri toplama akışlarını tek yerden yönetin.")
         subtitle.setWordWrap(True)
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -130,7 +133,7 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(camera_title)
         camera_grid = QGridLayout()
         camera_grid.setSpacing(8)
-        self.camera_slot_count = 8 if sys.platform.startswith("linux") else 4
+        self.camera_slot_count = 4
         self.selected_camera_index = max(0, min(settings.camera_index, self.camera_slot_count - 1))
         self.camera_cards: dict[int, CameraPreviewCard] = {}
         self.camera_availability: dict[int, bool | None] = {}
@@ -193,6 +196,16 @@ class SettingsWindow(QMainWindow):
         self.robust_calibration.setChecked(settings.robust_calibration)
         self.use_general_gaze_model = QCheckBox("Genel gaze modelini kullan")
         self.use_general_gaze_model.setChecked(settings.use_general_gaze_model)
+        self.general_model_path = QLineEdit(settings.general_gaze_model_path)
+        self.general_model_path.setPlaceholderText("models/personal_general.npz veya GAZETYPE_GENERAL_MODEL")
+        model_path_row = QWidget()
+        model_path_layout = QHBoxLayout(model_path_row)
+        model_path_layout.setContentsMargins(0, 0, 0, 0)
+        model_path_layout.setSpacing(6)
+        self.browse_model_button = QPushButton("Seç")
+        self.browse_model_button.clicked.connect(self._browse_model)
+        model_path_layout.addWidget(self.general_model_path, 1)
+        model_path_layout.addWidget(self.browse_model_button)
         self.collect_training_samples = QCheckBox("Kalibrasyon örneklerini JSONL kaydet")
         self.collect_training_samples.setChecked(settings.collect_training_samples)
         self.horizontal_gain = QSpinBox()
@@ -228,6 +241,7 @@ class SettingsWindow(QMainWindow):
         advanced_form.addRow("Bakış filtresi", self.adaptive_gaze_filter)
         advanced_form.addRow("Kalibrasyon", self.robust_calibration)
         advanced_form.addRow("Genel model", self.use_general_gaze_model)
+        advanced_form.addRow("Model dosyası", model_path_row)
         advanced_form.addRow("Eğitim verisi", self.collect_training_samples)
         advanced_form.addRow("Yatay / dikey kazanç", self.auto_gaze_gain)
         advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
@@ -250,12 +264,28 @@ class SettingsWindow(QMainWindow):
         self.model_start_button = QPushButton("Kişisel Modelle Başlat")
         self.model_start_button.setMinimumHeight(38)
         self.model_start_button.clicked.connect(self._emit_model_start)
+        dataset_row = QWidget()
+        dataset_layout = QHBoxLayout(dataset_row)
+        dataset_layout.setContentsMargins(0, 0, 0, 0)
+        dataset_layout.setSpacing(8)
+        self.guided_dataset_button = QPushButton("Nokta Dataset")
+        self.guided_dataset_button.setMinimumHeight(38)
+        self.guided_dataset_button.clicked.connect(lambda: self._emit_dataset(False))
+        self.moving_dataset_button = QPushButton("Hareketli Dataset")
+        self.moving_dataset_button.setMinimumHeight(38)
+        self.moving_dataset_button.clicked.connect(lambda: self._emit_dataset(True))
+        dataset_layout.addWidget(self.guided_dataset_button)
+        dataset_layout.addWidget(self.moving_dataset_button)
         layout.addWidget(self.status)
         layout.addWidget(self.start_button)
         layout.addWidget(self.model_start_button)
+        layout.addWidget(dataset_row)
         self.setStyleSheet(
             "QMainWindow, QWidget { background: #111722; color: #f6f8fc; font-size: 14px; }"
-            "QComboBox, QPushButton { padding: 8px; background: #202837; border: 1px solid #526078; border-radius: 6px; }"
+            "QComboBox, QLineEdit, QPushButton { padding: 8px; background: #202837; border: 1px solid #526078; border-radius: 6px; }"
+            "QTabWidget::pane { border: 1px solid #2d384b; border-radius: 6px; }"
+            "QTabBar::tab { padding: 8px 12px; background: #182131; border: 1px solid #2d384b; }"
+            "QTabBar::tab:selected { background: #202837; color: #ffffff; }"
             "QPushButton:hover { border-color: #2cc997; }"
         )
 
@@ -340,6 +370,7 @@ class SettingsWindow(QMainWindow):
             "adaptive_gaze_filter": self.adaptive_gaze_filter.isChecked(),
             "robust_calibration": self.robust_calibration.isChecked(),
             "use_general_gaze_model": self.use_general_gaze_model.isChecked(),
+            "general_gaze_model_path": self.general_model_path.text().strip(),
             "collect_training_samples": self.collect_training_samples.isChecked(),
             "horizontal_gain_percent": self.horizontal_gain.value(),
             "vertical_gain_percent": self.vertical_gain.value(),
@@ -351,6 +382,8 @@ class SettingsWindow(QMainWindow):
     def _lock_for_camera_start(self) -> dict[str, object]:
         self.start_button.setEnabled(False)
         self.model_start_button.setEnabled(False)
+        self.guided_dataset_button.setEnabled(False)
+        self.moving_dataset_button.setEnabled(False)
         self.status.setText("Kamera başlatılıyor…")
         self.stop_camera_previews()
         return self._current_values()
@@ -360,6 +393,19 @@ class SettingsWindow(QMainWindow):
 
     def _emit_model_start(self) -> None:
         self.model_start_requested.emit(self._lock_for_camera_start())
+
+    def _emit_dataset(self, moving: bool) -> None:
+        self.dataset_requested.emit(self._lock_for_camera_start(), moving)
+
+    def _browse_model(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Model dosyası seç",
+            self.general_model_path.text() or "models",
+            "Gazetype model (*.npz);;Tüm dosyalar (*)",
+        )
+        if path:
+            self.general_model_path.setText(path)
 
     def _update_gain_controls(self) -> None:
         manual = not self.auto_gaze_gain.isChecked()
@@ -377,6 +423,8 @@ class SettingsWindow(QMainWindow):
     def unlock(self) -> None:
         self.start_button.setEnabled(True)
         self.model_start_button.setEnabled(True)
+        self.guided_dataset_button.setEnabled(True)
+        self.moving_dataset_button.setEnabled(True)
 
 
 class CalibrationWindow(QWidget):
