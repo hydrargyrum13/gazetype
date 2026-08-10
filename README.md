@@ -97,13 +97,33 @@ python tools/train_gaze_model.py --quick --out models\smoke_general.npz
 üretilmiş ağırlıklar, dataset/model lisansı netleşmeden bu repo içinde
 dağıtılmaz.
 
+### Personal mouse-target dataset
+
+Kendi ekran koordinatlı verinizi toplamak için mouse hedefli collector
+kullanılabilir. Tam ekran bir katman açılır; imlecin olduğu noktaya bakıp sol
+tıkladığınızda o anki kamera feature'ları ve tıklanan ekran hedefi
+`training_samples.jsonl` dosyasına yazılır. Farklı kafa konumlarıyla çok sayıda
+örnek almak kişisel model kalitesini doğrudan artırır.
+
+```powershell
+python -m gazetype.dataset_collector --camera-index 0
+python -m tools.train_gaze_model --dataset weyeds --data-dir $env:LOCALAPPDATA\Gazetype --out models\personal_general.npz --polynomial-degree 2
+```
+
+Linux'ta varsayılan kayıt klasörü `~/.local/share/gazetype` olduğu için eğitim
+komutu şu şekilde çalıştırılabilir:
+
+```bash
+python -m tools.train_gaze_model --dataset weyeds --data-dir ~/.local/share/gazetype --out models/personal_general.npz --polynomial-degree 2
+```
+
 ### WEyeDS support
 
 Gazetype WEyeDS'i otomatik indirmez. Yerel datasetinizi normalize edilmiş bir
 ara manifest formatına dönüştürmeniz gerekir. `tools/datasets/weyeds.py` dataset
 klasöründe `gazetype_manifest.csv`, `gazetype_manifest.jsonl`,
 `mpiigaze_gazetype_manifest.jsonl`, `manifest.csv`, `manifest.jsonl`,
-`samples.csv` veya `samples.jsonl` arar.
+`samples.csv`, `samples.jsonl` veya `training_samples.jsonl` arar.
 
 Kabul edilen alanlar:
 
