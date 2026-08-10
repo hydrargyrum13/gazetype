@@ -50,6 +50,20 @@ def fit_ridge(
     return mean, std, weights
 
 
+def predict(features: np.ndarray, mean: np.ndarray, std: np.ndarray, weights: np.ndarray, polynomial_degree: int) -> np.ndarray:
+    design = _design((features - mean) / std, polynomial_degree)
+    return np.clip(design @ weights, 0.0, 1.0)
+
+
+def metrics(predictions: np.ndarray, targets: np.ndarray) -> dict[str, float]:
+    errors = np.linalg.norm(predictions - targets, axis=1)
+    return {
+        "mean_error": float(np.mean(errors)),
+        "median_error": float(np.median(errors)),
+        "p90_error": float(np.percentile(errors, 90)),
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a local Gazetype general gaze model.")
     parser.add_argument("--dataset", choices=("weyeds", "mpiigaze"), default="weyeds")
@@ -59,6 +73,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summarize", action="store_true", help="Inspect a dataset without training.")
     parser.add_argument("--ridge", type=float, default=1e-2)
     parser.add_argument("--polynomial-degree", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--validation-fraction", type=float, default=0.15)
+    parser.add_argument("--seed", type=int, default=13)
     return parser.parse_args()
 
 
@@ -89,6 +105,28 @@ def main() -> int:
             raise SystemExit(f"Unsupported dataset: {args.dataset}")
         features = np.asarray(sample_features, dtype=np.float64)
         targets = np.asarray(sample_targets, dtype=np.float64)
+
+    validation_fraction = max(0.0, min(float(args.validation_fraction), 0.5))
+    if validation_fraction > 0.0 and len(features) >= 40:
+        rng = np.random.default_rng(args.seed)
+        order = rng.permutation(len(features))
+        validation_count = max(1, int(len(features) * validation_fraction))
+        validation_indices = order[:validation_count]
+        training_indices = order[validation_count:]
+        eval_mean, eval_std, eval_weights = fit_ridge(
+            features[training_indices],
+            targets[training_indices],
+            args.ridge,
+            args.polynomial_degree,
+        )
+        validation_predictions = predict(
+            features[validation_indices],
+            eval_mean,
+            eval_std,
+            eval_weights,
+            args.polynomial_degree,
+        )
+        print({"validation": metrics(validation_predictions, targets[validation_indices])})
 
     mean, std, weights = fit_ridge(features, targets, args.ridge, args.polynomial_degree)
     args.out.parent.mkdir(parents=True, exist_ok=True)
