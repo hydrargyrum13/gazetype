@@ -2,6 +2,7 @@ from PySide6.QtCore import QPoint
 
 from gazetype.dataset_collector import (
     ScreenGeometry,
+    create_moving_target_route,
     guided_target_sequence,
     moving_target_at_time,
     normalized_target_for_position,
@@ -33,7 +34,16 @@ def test_guided_target_sequence_covers_screen_area() -> None:
 
 
 def test_moving_target_at_time_stays_inside_screen() -> None:
+    route = create_moving_target_route(7)
     for seconds in (0.0, 3.5, 12.0, 44.0):
-        x, y = moving_target_at_time(seconds)
+        x, y = moving_target_at_time(seconds, route)
         assert 0.04 <= x <= 0.96
         assert 0.05 <= y <= 0.95
+
+
+def test_moving_target_route_changes_with_seed() -> None:
+    first = create_moving_target_route(1)
+    second = create_moving_target_route(2)
+
+    assert first != second
+    assert create_moving_target_route(1) == first
