@@ -109,6 +109,7 @@ class CameraPreviewCard(QPushButton):
 
 class SettingsWindow(QMainWindow):
     start_requested = Signal(object)
+    model_start_requested = Signal(object)
 
     def __init__(self, settings: AppSettings):
         super().__init__()
@@ -246,8 +247,12 @@ class SettingsWindow(QMainWindow):
         self.start_button = QPushButton("Kalibrasyonu Başlat")
         self.start_button.setMinimumHeight(44)
         self.start_button.clicked.connect(self._emit_start)
+        self.model_start_button = QPushButton("Kişisel Modelle Başlat")
+        self.model_start_button.setMinimumHeight(38)
+        self.model_start_button.clicked.connect(self._emit_model_start)
         layout.addWidget(self.status)
         layout.addWidget(self.start_button)
+        layout.addWidget(self.model_start_button)
         self.setStyleSheet(
             "QMainWindow, QWidget { background: #111722; color: #f6f8fc; font-size: 14px; }"
             "QComboBox, QPushButton { padding: 8px; background: #202837; border: 1px solid #526078; border-radius: 6px; }"
@@ -317,12 +322,9 @@ class SettingsWindow(QMainWindow):
                 selected = index
         self.screen_combo.setCurrentIndex(selected)
 
-    def _emit_start(self) -> None:
-        self.start_button.setEnabled(False)
-        self.status.setText("Kamera başlatılıyor…")
+    def _current_values(self) -> dict[str, object]:
         screen_name, geometry, screen_index = self.screen_combo.currentData()
-        self.stop_camera_previews()
-        self.start_requested.emit({
+        return {
             "camera_index": self.selected_camera_index,
             "screen_name": screen_name,
             "screen_geometry": geometry,
@@ -344,7 +346,20 @@ class SettingsWindow(QMainWindow):
             "vertical_offset_percent": self.vertical_offset.value(),
             "head_compensation_percent": self.head_compensation.value(),
             "head_motion_threshold_percent": self.head_motion_threshold.value(),
-        })
+        }
+
+    def _lock_for_camera_start(self) -> dict[str, object]:
+        self.start_button.setEnabled(False)
+        self.model_start_button.setEnabled(False)
+        self.status.setText("Kamera başlatılıyor…")
+        self.stop_camera_previews()
+        return self._current_values()
+
+    def _emit_start(self) -> None:
+        self.start_requested.emit(self._lock_for_camera_start())
+
+    def _emit_model_start(self) -> None:
+        self.model_start_requested.emit(self._lock_for_camera_start())
 
     def _update_gain_controls(self) -> None:
         manual = not self.auto_gaze_gain.isChecked()
@@ -361,6 +376,7 @@ class SettingsWindow(QMainWindow):
 
     def unlock(self) -> None:
         self.start_button.setEnabled(True)
+        self.model_start_button.setEnabled(True)
 
 
 class CalibrationWindow(QWidget):
