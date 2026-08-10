@@ -16,6 +16,7 @@ MANIFEST_NAMES = (
     "manifest.jsonl",
     "samples.csv",
     "samples.jsonl",
+    "training_samples.jsonl",
 )
 
 
