@@ -3,12 +3,13 @@ from __future__ import annotations
 import argparse
 import random
 import sys
+import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtCore import QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -41,6 +42,12 @@ def normalized_target_for_position(
     return max(0.0, min(float(x), 1.0)), max(0.0, min(float(y), 1.0))
 
 
+def moving_target_at_time(elapsed_seconds: float) -> tuple[float, float]:
+    x = 0.5 + 0.43 * np.sin(elapsed_seconds * 0.73)
+    y = 0.5 + 0.39 * np.sin(elapsed_seconds * 1.07 + 0.8)
+    return float(np.clip(x, 0.04, 0.96)), float(np.clip(y, 0.05, 0.95))
+
+
 class MouseDatasetCollector(QWidget):
     def __init__(
         self,
@@ -50,6 +57,9 @@ class MouseDatasetCollector(QWidget):
         quadrilateral_eye_mapping: bool,
         samples_per_capture: int,
         guided_targets: tuple[tuple[float, float], ...] = (),
+        moving_target: bool = False,
+        duration_seconds: int = 90,
+        reaction_lag_ms: int = 250,
     ):
         super().__init__()
         self.camera_index = camera_index
@@ -68,6 +78,12 @@ class MouseDatasetCollector(QWidget):
         self.samples_per_capture = max(1, samples_per_capture)
         self.guided_targets = guided_targets
         self.guided_index = 0
+        self.moving_target = moving_target
+        self.duration_seconds = max(10, duration_seconds)
+        self.reaction_lag_ms = max(0, reaction_lag_ms)
+        self.started_at = time.perf_counter()
+        self.target_history: deque[tuple[float, tuple[float, float]]] = deque(maxlen=300)
+        self.current_target: tuple[float, float] | None = None
         self.status = "Kamera baslatiliyor"
         self.worker = CameraWorker(camera_index, quadrilateral_eye_mapping)
         self.worker.frame_ready.connect(self.on_frame)
@@ -81,20 +97,71 @@ class MouseDatasetCollector(QWidget):
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setGeometry(
             screen_geometry.x,
             screen_geometry.y,
             screen_geometry.width,
             screen_geometry.height,
         )
+        self.target_timer = QTimer(self)
+        self.target_timer.timeout.connect(self.update_target)
+        self.target_timer.start(33)
+
+    def update_target(self) -> None:
+        if not self.moving_target:
+            self.update()
+            return
+        elapsed = time.perf_counter() - self.started_at
+        if elapsed >= self.duration_seconds:
+            self.status = f"Bitti: {self.sample_count} ornek"
+            self.update()
+            self.close()
+            return
+        self.current_target = moving_target_at_time(elapsed)
+        self.target_history.append((time.perf_counter(), self.current_target))
+        self.status = f"Takip et - {self.sample_count} frame"
+        self.update()
 
     def on_frame(self, frame: VisionFrame) -> None:
         self.latest_frame = frame
         if self.face_present:
             self.frame_buffer.append(frame)
-        if self.face_present:
+            if self.moving_target:
+                self.capture_lagged_moving_frame(frame)
+        if self.face_present and not self.moving_target:
             self.status = f"Hazir - FPS {frame.fps:.1f}"
         self.update()
+
+    def lagged_target(self) -> tuple[float, float] | None:
+        if not self.target_history:
+            return self.current_target
+        cutoff = time.perf_counter() - self.reaction_lag_ms / 1000.0
+        candidate = self.target_history[0][1]
+        for timestamp, target in self.target_history:
+            if timestamp > cutoff:
+                break
+            candidate = target
+        return candidate
+
+    def capture_lagged_moving_frame(self, frame: VisionFrame) -> None:
+        target = self.lagged_target()
+        if target is None:
+            return
+        self.writer.write(
+            target,
+            frame.features,
+            {
+                "source": "moving_target_dataset_collector",
+                "fps": frame.fps,
+                "frame_timestamp_ms": frame.timestamp_ms,
+                "blink_left": frame.blink_left,
+                "blink_right": frame.blink_right,
+                "reaction_lag_ms": self.reaction_lag_ms,
+            },
+        )
+        self.sample_count += 1
+        self.last_target = target
 
     def on_face_presence(self, present: bool) -> None:
         self.face_present = present
@@ -178,8 +245,17 @@ class MouseDatasetCollector(QWidget):
         painter.drawText(
             24,
             36,
-            f"{self.status} | Sol tik/Space kaydet | Esc cikis",
+            f"{self.status} | Esc cikis",
         )
+        if self.moving_target and self.current_target is not None:
+            x = int(self.current_target[0] * self.width())
+            y = int(self.current_target[1] * self.height())
+            painter.setPen(QColor(236, 255, 249, 245))
+            painter.setBrush(QColor(44, 201, 151, 230))
+            painter.drawEllipse(QPoint(x, y), 18, 18)
+            painter.setBrush(QColor(255, 255, 255, 245))
+            painter.drawEllipse(QPoint(x, y), 5, 5)
+            return
         if self.guided_targets and self.guided_index < len(self.guided_targets):
             target = self.guided_targets[self.guided_index]
             x = int(target[0] * self.width())
@@ -208,7 +284,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", type=Path, default=default_training_samples_path())
     parser.add_argument("--samples-per-capture", type=int, default=6)
     parser.add_argument("--guided", action="store_true", help="Show balanced screen targets instead of using click position.")
+    parser.add_argument("--moving", action="store_true", help="Record every frame while a delayed moving target crosses the screen.")
     parser.add_argument("--target-count", type=int, default=120)
+    parser.add_argument("--duration-seconds", type=int, default=90)
+    parser.add_argument("--reaction-lag-ms", type=int, default=250)
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument(
         "--classic-eye-ratio",
@@ -245,6 +324,9 @@ def main() -> int:
         not args.classic_eye_ratio,
         args.samples_per_capture,
         guided_targets,
+        args.moving,
+        args.duration_seconds,
+        args.reaction_lag_ms,
     )
     collector.showFullScreen()
     return application.exec()
