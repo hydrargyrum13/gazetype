@@ -7,7 +7,9 @@ import numpy as np
 
 
 CALIBRATION_MODEL_VERSION = 4
+CALIBRATION_ADAPTER_VERSION = 1
 GAZE_FEATURE_COUNT = 10
+ADAPTER_INPUT_COUNT = GAZE_FEATURE_COUNT + 2
 MINIMUM_FEATURE_SCALES = np.asarray(
     (0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.015, 0.01, 0.015, 0.015)
 )
@@ -32,6 +34,7 @@ def calibration_targets(count: int) -> tuple[tuple[float, float], ...]:
 
 CALIBRATION_TARGETS = calibration_targets(DEFAULT_CALIBRATION_POINT_COUNT)
 BASIS_SIZE = 36
+ADAPTER_BASIS_SIZE = 1 + ADAPTER_INPUT_COUNT + ADAPTER_INPUT_COUNT * (ADAPTER_INPUT_COUNT + 1) // 2
 
 
 def _basis(features: np.ndarray) -> np.ndarray:
@@ -78,6 +81,15 @@ def _basis(features: np.ndarray) -> np.ndarray:
         yaw * yaw,
         pitch * pitch,
     ))
+
+
+def _adapter_basis(values: np.ndarray) -> np.ndarray:
+    columns = [np.ones(len(values))]
+    columns.extend(values[:, index] for index in range(values.shape[1]))
+    for first in range(values.shape[1]):
+        for second in range(first, values.shape[1]):
+            columns.append(values[:, first] * values[:, second])
+    return np.column_stack(columns)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,4 +179,101 @@ class CalibrationModel:
             tuple(tuple(float(value) for value in axis) for axis in values),  # type: ignore[arg-type]
             tuple(float(value) for value in feature_mean),
             tuple(float(value) for value in feature_scale),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationAdapterModel:
+    coefficients: tuple[tuple[float, ...], tuple[float, ...]]
+    input_mean: tuple[float, ...]
+    input_scale: tuple[float, ...]
+    max_correction: float = 0.25
+
+    @classmethod
+    def fit(
+        cls,
+        base_predictions: Iterable[Iterable[float]],
+        features: Iterable[Iterable[float]],
+        targets: Iterable[Iterable[float]],
+        ridge: float = 2e-2,
+        max_correction: float = 0.25,
+    ) -> "CalibrationAdapterModel":
+        base_array = np.asarray(tuple(base_predictions), dtype=np.float64)
+        feature_array = np.asarray(tuple(features), dtype=np.float64)
+        target_array = np.asarray(tuple(targets), dtype=np.float64)
+        if base_array.ndim != 2 or base_array.shape[1] != 2:
+            raise ValueError("Calibration adapter requires base x/y predictions")
+        if feature_array.ndim != 2 or feature_array.shape[1] != GAZE_FEATURE_COUNT:
+            raise ValueError(f"Calibration adapter requires {GAZE_FEATURE_COUNT} gaze features")
+        if len(feature_array) < MINIMUM_CALIBRATION_POINTS or target_array.shape != (len(feature_array), 2):
+            raise ValueError(
+                f"Calibration adapter requires at least {MINIMUM_CALIBRATION_POINTS} paired samples"
+            )
+        if len(base_array) != len(feature_array):
+            raise ValueError("Base predictions and features must have the same length")
+        inputs = np.column_stack((base_array, feature_array))
+        input_mean = np.mean(inputs, axis=0)
+        input_scale = np.maximum(np.std(inputs, axis=0), 1e-3)
+        design = _adapter_basis((inputs - input_mean) / input_scale)
+        target_delta = np.clip(target_array - base_array, -max_correction, max_correction)
+        regularizer = ridge * np.eye(design.shape[1])
+        regularizer[0, 0] = 0.0
+        coefficients = np.linalg.solve(design.T @ design + regularizer, design.T @ target_delta)
+        return cls(
+            tuple(tuple(float(value) for value in coefficients[:, axis]) for axis in range(2)),
+            tuple(float(value) for value in input_mean),
+            tuple(float(value) for value in input_scale),
+            float(max_correction),
+        )
+
+    def predict(
+        self, base_prediction: Iterable[float], features: Iterable[float]
+    ) -> tuple[float, float]:
+        base = np.asarray(tuple(base_prediction), dtype=np.float64)
+        row_features = np.asarray(tuple(features), dtype=np.float64)
+        if base.shape != (2,):
+            raise ValueError("Expected base x/y prediction")
+        if row_features.shape != (GAZE_FEATURE_COUNT,):
+            raise ValueError(f"Expected {GAZE_FEATURE_COUNT} gaze features")
+        row = np.concatenate((base, row_features))
+        normalized = np.clip(
+            (row - np.asarray(self.input_mean)) / np.asarray(self.input_scale), -4.0, 4.0
+        )
+        design = _adapter_basis(normalized.reshape(1, ADAPTER_INPUT_COUNT))[0]
+        coefficients = np.asarray(self.coefficients, dtype=np.float64).T
+        correction = np.clip(design @ coefficients, -self.max_correction, self.max_correction)
+        result = base + correction
+        return float(np.clip(result[0], 0.0, 1.0)), float(np.clip(result[1], 0.0, 1.0))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model_version": CALIBRATION_ADAPTER_VERSION,
+            "coefficients": [list(axis) for axis in self.coefficients],
+            "input_mean": list(self.input_mean),
+            "input_scale": list(self.input_scale),
+            "max_correction": self.max_correction,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "CalibrationAdapterModel":
+        if data.get("model_version") != CALIBRATION_ADAPTER_VERSION:
+            raise ValueError("Calibration adapter is outdated")
+        values = data["coefficients"]
+        input_mean = data.get("input_mean")
+        input_scale = data.get("input_scale")
+        if (
+            not isinstance(values, list)
+            or len(values) != 2
+            or any(not isinstance(axis, list) or len(axis) != ADAPTER_BASIS_SIZE for axis in values)
+            or not isinstance(input_mean, list)
+            or len(input_mean) != ADAPTER_INPUT_COUNT
+            or not isinstance(input_scale, list)
+            or len(input_scale) != ADAPTER_INPUT_COUNT
+        ):
+            raise ValueError("Invalid calibration adapter")
+        return cls(
+            tuple(tuple(float(value) for value in axis) for axis in values),  # type: ignore[arg-type]
+            tuple(float(value) for value in input_mean),
+            tuple(float(value) for value in input_scale),
+            float(data.get("max_correction", 0.25)),
         )

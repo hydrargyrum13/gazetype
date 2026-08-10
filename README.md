@@ -78,11 +78,53 @@ Windows paketi:
 .\scripts\build_windows.ps1
 ```
 
+### General gaze model + personal calibration
+
+Gazetype, mevcut kişisel kalibrasyon modelini korurken opsiyonel bir genel gaze
+modeli ve onun üstünde kişisel calibration adapter kullanabilir. Genel model
+`.npz` formatındadır ve `GAZETYPE_GENERAL_MODEL` ortam değişkeniyle ya da ayar
+dosyasındaki `general_gaze_model_path` alanıyla gösterilir. Model dosyası yoksa
+uygulama sessizce eski kişisel kalibrasyon davranışına döner.
+
+Genel model eğitimi için başlangıç aracı:
+
+```powershell
+python tools/train_gaze_model.py --dataset weyeds --data-dir C:\datasets\weyeds-normalized --out models\gazetype_general.npz
+python tools/train_gaze_model.py --quick --out models\smoke_general.npz
+```
+
+`models/`, `.npz` ve `.onnx` çıktıları git dışında tutulur. Public datasetlerden
+üretilmiş ağırlıklar, dataset/model lisansı netleşmeden bu repo içinde
+dağıtılmaz.
+
+### WEyeDS support
+
+Gazetype WEyeDS'i otomatik indirmez. Yerel datasetinizi normalize edilmiş bir
+ara manifest formatına dönüştürmeniz gerekir. `tools/datasets/weyeds.py` dataset
+klasöründe `gazetype_manifest.csv`, `gazetype_manifest.jsonl`, `manifest.csv`,
+`manifest.jsonl`, `samples.csv` veya `samples.jsonl` arar.
+
+Kabul edilen alanlar:
+
+- `target_x`, `target_y`
+- `features` JSON listesi veya `feature_0` ... `feature_9`
+- `image_path` veya `face_path`
+- opsiyonel `left_eye_path`, `right_eye_path`, `screen_width`, `screen_height`
+
+İlk baseline trainer ham görüntüden MediaPipe feature çıkarmaz; manifestte
+önceden çıkarılmış 10 Gazetype gaze feature'ı bekler.
+
 ## Gizlilik
 
 Kamera kareleri yalnızca bellekte işlenir; kaydedilmez veya ağ üzerinden
 gönderilmez. Ayarlar ve kalibrasyon verileri kullanıcının yerel uygulama veri
 klasöründe tutulur.
+
+Gelişmiş ayarlardan etkinleştirilirse kalibrasyon örnekleri yerel uygulama veri
+klasöründe `training_samples.jsonl` olarak saklanabilir. Her satır hedef x/y,
+feature listesi, ekran geometrisi ve kamera indeksini içerir. Raw kamera
+görüntüsü varsayılan olarak kaydedilmez; kişisel kalibrasyon verisi cihazda
+kalır.
 
 ## Sınırlamalar
 

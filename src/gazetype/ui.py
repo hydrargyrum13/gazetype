@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
@@ -28,6 +30,7 @@ from gazetype.camera_preview import CameraPreviewWorker
 from gazetype.keyboards import KeyboardGeometry
 from gazetype.models import KeyboardLayout, Sensitivity
 from gazetype.settings import AppSettings
+from gazetype.training_data import TrainingSampleWriter
 from gazetype.windows import make_window_non_activating
 
 
@@ -126,11 +129,12 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(camera_title)
         camera_grid = QGridLayout()
         camera_grid.setSpacing(8)
-        self.selected_camera_index = max(0, min(settings.camera_index, 3))
+        self.camera_slot_count = 8 if sys.platform.startswith("linux") else 4
+        self.selected_camera_index = max(0, min(settings.camera_index, self.camera_slot_count - 1))
         self.camera_cards: dict[int, CameraPreviewCard] = {}
         self.camera_availability: dict[int, bool | None] = {}
         self.preview_workers: dict[int, CameraPreviewWorker] = {}
-        for index in range(4):
+        for index in range(self.camera_slot_count):
             card = CameraPreviewCard(index)
             card.selected.connect(self.select_camera)
             card.set_selected(index == self.selected_camera_index)
@@ -186,6 +190,10 @@ class SettingsWindow(QMainWindow):
         self.adaptive_gaze_filter.setChecked(settings.adaptive_gaze_filter)
         self.robust_calibration = QCheckBox("Aykırı örneklere dayanıklı kalibrasyon")
         self.robust_calibration.setChecked(settings.robust_calibration)
+        self.use_general_gaze_model = QCheckBox("Genel gaze modelini kullan")
+        self.use_general_gaze_model.setChecked(settings.use_general_gaze_model)
+        self.collect_training_samples = QCheckBox("Kalibrasyon örneklerini JSONL kaydet")
+        self.collect_training_samples.setChecked(settings.collect_training_samples)
         self.horizontal_gain = QSpinBox()
         self.horizontal_gain.setRange(50, 200)
         self.horizontal_gain.setValue(settings.horizontal_gain_percent)
@@ -218,6 +226,8 @@ class SettingsWindow(QMainWindow):
         advanced_form.addRow("İki göz", self.binocular_stabilization)
         advanced_form.addRow("Bakış filtresi", self.adaptive_gaze_filter)
         advanced_form.addRow("Kalibrasyon", self.robust_calibration)
+        advanced_form.addRow("Genel model", self.use_general_gaze_model)
+        advanced_form.addRow("Eğitim verisi", self.collect_training_samples)
         advanced_form.addRow("Yatay / dikey kazanç", self.auto_gaze_gain)
         advanced_form.addRow("Yatay kazanç (90–115 dengeli)", self.horizontal_gain)
         advanced_form.addRow("Dikey kazanç (110–160 dengeli)", self.vertical_gain)
@@ -327,6 +337,8 @@ class SettingsWindow(QMainWindow):
             "binocular_stabilization": self.binocular_stabilization.isChecked(),
             "adaptive_gaze_filter": self.adaptive_gaze_filter.isChecked(),
             "robust_calibration": self.robust_calibration.isChecked(),
+            "use_general_gaze_model": self.use_general_gaze_model.isChecked(),
+            "collect_training_samples": self.collect_training_samples.isChecked(),
             "horizontal_gain_percent": self.horizontal_gain.value(),
             "vertical_gain_percent": self.vertical_gain.value(),
             "vertical_offset_percent": self.vertical_offset.value(),
@@ -367,11 +379,19 @@ class CalibrationWindow(QWidget):
         self._face_present = False
         self._targets = CALIBRATION_TARGETS
         self._keyboard: KeyboardGeometry | None = None
+        self._training_writer: TrainingSampleWriter | None = None
 
-    def begin(self, screen, targets=CALIBRATION_TARGETS, keyboard=None) -> None:
+    def begin(
+        self,
+        screen,
+        targets=CALIBRATION_TARGETS,
+        keyboard=None,
+        training_writer: TrainingSampleWriter | None = None,
+    ) -> None:
         self.setGeometry(screen.geometry())
         self._targets = tuple(targets)
         self._keyboard = keyboard
+        self._training_writer = training_writer
         self._target_index = 0
         self._target_started_ms = None
         self._samples.clear()
@@ -410,6 +430,10 @@ class CalibrationWindow(QWidget):
         target = self._targets[self._target_index]
         self._collected.extend(tuple(float(value) for value in row) for row in selected)
         self._collected_targets.extend([target] * len(selected))
+        if self._training_writer is not None:
+            quality = {"selected_sample_count": int(len(selected))}
+            for row in selected:
+                self._training_writer.write(target, row, quality)
         self._samples.clear()
         self._target_started_ms = None
         self._target_index += 1

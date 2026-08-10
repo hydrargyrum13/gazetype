@@ -13,7 +13,7 @@ authors = [{ name = "hydrargyrum13" }]
 dependencies = [
   "PySide6>=6.8,<7",
   "opencv-python>=4.10,<5",
-  "mediapipe>=0.10.20,<0.11",
+  "mediapipe>=0.10.20,<0.10.21",
   "numpy>=1.26,<2",
 ]
 

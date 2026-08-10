@@ -9,6 +9,7 @@ from gazetype.calibration import (
     DEFAULT_CALIBRATION_POINT_COUNT,
     MAXIMUM_CALIBRATION_POINTS,
     MINIMUM_CALIBRATION_POINTS,
+    CalibrationAdapterModel,
     CalibrationModel,
 )
 from gazetype.models import KeyboardLayout, Sensitivity
@@ -34,7 +35,12 @@ class AppSettings:
     vertical_offset_percent: int = 0
     head_compensation_percent: int = 100
     head_motion_threshold_percent: int = 100
+    use_general_gaze_model: bool = False
+    general_gaze_model_path: str = ""
+    collect_training_samples: bool = False
+    collect_training_images: bool = False
     calibration: CalibrationModel | None = None
+    calibration_adapter: CalibrationAdapterModel | None = None
 
     def __post_init__(self) -> None:
         # Qt stores StrEnum values as plain strings inside QVariant/QComboBox.
@@ -63,17 +69,27 @@ class AppSettings:
         data["layout"] = self.layout.value
         data["sensitivity"] = self.sensitivity.value
         data["calibration"] = self.calibration.to_dict() if self.calibration else None
+        data["calibration_adapter"] = (
+            self.calibration_adapter.to_dict() if self.calibration_adapter else None
+        )
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "AppSettings":
         calibration_data = data.get("calibration")
         calibration = None
+        adapter_data = data.get("calibration_adapter")
+        calibration_adapter = None
         if isinstance(calibration_data, dict):
             try:
                 calibration = CalibrationModel.from_dict(calibration_data)
             except (KeyError, TypeError, ValueError):
                 calibration = None
+        if isinstance(adapter_data, dict):
+            try:
+                calibration_adapter = CalibrationAdapterModel.from_dict(adapter_data)
+            except (KeyError, TypeError, ValueError):
+                calibration_adapter = None
         return cls(
             camera_index=int(data.get("camera_index", 0)),
             screen_name=str(data.get("screen_name", "")),
@@ -97,7 +113,12 @@ class AppSettings:
             head_motion_threshold_percent=int(
                 data.get("head_motion_threshold_percent", 100)
             ),
+            use_general_gaze_model=bool(data.get("use_general_gaze_model", False)),
+            general_gaze_model_path=str(data.get("general_gaze_model_path", "")),
+            collect_training_samples=bool(data.get("collect_training_samples", False)),
+            collect_training_images=bool(data.get("collect_training_images", False)),
             calibration=calibration,
+            calibration_adapter=calibration_adapter,
         )
 
 

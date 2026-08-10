@@ -1,4 +1,7 @@
 import ctypes
+import sys
+
+import pytest
 
 from gazetype.input_windows import INPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, key_events
 from gazetype.keyboards import BACKSPACE
@@ -18,4 +21,6 @@ def test_special_key_uses_virtual_key() -> None:
 
 
 def test_input_structure_matches_win64_abi() -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows INPUT ABI size is only meaningful on Windows")
     assert ctypes.sizeof(INPUT) == 40

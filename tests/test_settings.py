@@ -93,3 +93,19 @@ def test_experimental_sensitivity_settings_are_bounded() -> None:
     assert settings.vertical_offset_percent == 25
     assert settings.head_compensation_percent == 150
     assert settings.head_motion_threshold_percent == 40
+
+
+def test_general_model_and_training_flags_are_persisted() -> None:
+    settings = AppSettings.from_dict({
+        "use_general_gaze_model": True,
+        "general_gaze_model_path": "~/models/gazetype_general.npz",
+        "collect_training_samples": True,
+        "collect_training_images": True,
+    })
+    assert settings.use_general_gaze_model is True
+    assert settings.general_gaze_model_path == "~/models/gazetype_general.npz"
+    assert settings.collect_training_samples is True
+    assert settings.collect_training_images is True
+    serialized = settings.to_dict()
+    assert serialized["use_general_gaze_model"] is True
+    assert serialized["collect_training_samples"] is True

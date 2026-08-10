@@ -12,7 +12,7 @@ from gazetype.ui import KeyboardOverlay, SettingsWindow, TrackingWindow
 def test_camera_preview_cards_select_camera() -> None:
     application = QApplication.instance() or QApplication([])
     window = SettingsWindow(AppSettings(camera_index=1))
-    assert len(window.camera_cards) == 4
+    assert len(window.camera_cards) >= 4
     assert window.selected_camera_index == 1
     window.select_camera(3)
     assert window.selected_camera_index == 3

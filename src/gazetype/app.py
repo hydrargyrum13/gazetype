@@ -8,12 +8,18 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from gazetype.blink import DeliberateBlinkDetector
-from gazetype.calibration import CalibrationModel, calibration_targets
-from gazetype.input_windows import WindowsInputSender
+from gazetype.calibration import CalibrationAdapterModel, CalibrationModel, calibration_targets
+from gazetype.gaze_model import (
+    build_runtime_predictor,
+    configured_general_model_path,
+    load_general_predictor,
+)
+from gazetype.input import create_input_sender
 from gazetype.keyboards import KeyboardGeometry
 from gazetype.landing import LandingDetector
 from gazetype.models import GazePoint, KeyboardLayout, SENSITIVITY_PROFILES, Sensitivity, VisionFrame
 from gazetype.settings import AppSettings, SettingsStore
+from gazetype.training_data import TrainingSampleWriter, default_training_samples_path
 from gazetype.ui import (
     CalibrationWindow,
     KeyboardOverlay,
@@ -103,7 +109,7 @@ class GazetypeController:
         self.toggle = ToggleWindow()
         self.tracking_window = TrackingWindow()
         self.worker: CameraWorker | None = None
-        self.input_sender = WindowsInputSender()
+        self.input_sender = create_input_sender()
         self.landing = LandingDetector(SENSITIVITY_PROFILES[self.settings.sensitivity])
         self.blink = DeliberateBlinkDetector()
         self.keyboard_enabled = False
@@ -113,6 +119,9 @@ class GazetypeController:
         self.filtered_gaze: tuple[float, float] | None = None
         self.previous_head_sample: tuple[int, tuple[float, ...]] | None = None
         self.head_motion_until_ms = 0
+        self.gaze_predictor = None
+        if self.settings.calibration is not None:
+            self._refresh_gaze_predictor()
 
         self.settings_window.start_requested.connect(self.begin_calibration)
         self.calibration_window.completed.connect(self.finish_calibration)
@@ -173,6 +182,10 @@ class GazetypeController:
             binocular_stabilization=bool(values["binocular_stabilization"]),
             adaptive_gaze_filter=bool(values["adaptive_gaze_filter"]),
             robust_calibration=bool(values["robust_calibration"]),
+            use_general_gaze_model=bool(values["use_general_gaze_model"]),
+            general_gaze_model_path=self.settings.general_gaze_model_path,
+            collect_training_samples=bool(values["collect_training_samples"]),
+            collect_training_images=self.settings.collect_training_images,
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
             vertical_gain_percent=int(values["vertical_gain_percent"]),
             vertical_offset_percent=int(values["vertical_offset_percent"]),
@@ -184,6 +197,7 @@ class GazetypeController:
         self.tracking_window.configure_tuning(self.settings)
         self.previous_head_sample = None
         self.head_motion_until_ms = 0
+        self.gaze_predictor = None
         self._stop_worker()
         self.worker = CameraWorker(
             self.settings.camera_index, self.settings.quadrilateral_eye_mapping
@@ -204,14 +218,34 @@ class GazetypeController:
             )
         else:
             targets = calibration_targets(self.settings.calibration_point_count)
-        self.calibration_window.begin(self.screen, targets, calibration_keyboard)
+        training_writer = (
+            TrainingSampleWriter(
+                default_training_samples_path(),
+                self.settings.screen_geometry,
+                self.settings.camera_index,
+            )
+            if self.settings.collect_training_samples
+            else None
+        )
+        self.calibration_window.begin(self.screen, targets, calibration_keyboard, training_writer)
 
     def finish_calibration(self, features, targets) -> None:
         try:
             self.settings.calibration = CalibrationModel.fit(
                 features, targets, robust=self.settings.robust_calibration
             )
+            self.settings.calibration_adapter = None
+            if self.settings.use_general_gaze_model:
+                general = load_general_predictor(
+                    configured_general_model_path(self.settings.general_gaze_model_path)
+                )
+                if general is not None:
+                    base_predictions = [general.predict(tuple(feature)) for feature in features]
+                    self.settings.calibration_adapter = CalibrationAdapterModel.fit(
+                        base_predictions, features, targets
+                    )
             self.store.save(self.settings)
+            self._refresh_gaze_predictor()
         except ValueError as exc:
             self.on_camera_error(str(exc))
             return
@@ -251,7 +285,11 @@ class GazetypeController:
             ) * compensation
         if self.settings.binocular_stabilization:
             compensated_features = stabilize_binocular_features(compensated_features, model)
-        x, y = model.predict(compensated_features)
+        if self.gaze_predictor is None:
+            self._refresh_gaze_predictor()
+        if self.gaze_predictor is None:
+            return
+        x, y = self.gaze_predictor.predict(tuple(compensated_features))
         if self.settings.auto_gaze_gain:
             horizontal_gain, vertical_gain = eye_ratio_gains(model)
         else:
@@ -323,6 +361,17 @@ class GazetypeController:
                 setattr(self.settings, key, int(value))
         if self.settings.calibration is not None:
             self.store.save(self.settings)
+
+    def _refresh_gaze_predictor(self) -> None:
+        if self.settings.calibration is None:
+            self.gaze_predictor = None
+            return
+        self.gaze_predictor = build_runtime_predictor(
+            self.settings.calibration,
+            self.settings.use_general_gaze_model,
+            self.settings.general_gaze_model_path,
+            self.settings.calibration_adapter,
+        )
 
     def on_camera_error(self, message: str) -> None:
         self.calibration_window.hide()
