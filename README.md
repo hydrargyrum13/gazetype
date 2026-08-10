@@ -115,7 +115,12 @@ komutu şu şekilde çalıştırılabilir:
 
 ```bash
 python -m tools.train_gaze_model --dataset weyeds --data-dir ~/.local/share/gazetype --out models/personal_general.npz --polynomial-degree 2
+GAZETYPE_GENERAL_MODEL=models/personal_general.npz python -m gazetype
 ```
+
+Uygulamada gelişmiş ayarlardan "Genel gaze modelini kullan" seçeneğini açıp
+"Kişisel Modelle Başlat" düğmesine basarsanız, eğitilmiş `.npz` model doğrudan
+kalibrasyon objesi olmadan kullanılır.
 
 ### WEyeDS support
 
