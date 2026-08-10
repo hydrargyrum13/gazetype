@@ -36,3 +36,20 @@ def test_weyeds_normalized_csv_manifest_parser(tmp_path) -> None:
     sample = load_normalized_manifest(manifest)[0]
     assert sample.target == (0.4, 0.6)
     assert sample.features == tuple(float(value) for value in range(10))
+
+
+def test_weyeds_loader_accepts_training_samples_jsonl(tmp_path) -> None:
+    manifest = tmp_path / "training_samples.jsonl"
+    manifest.write_text(
+        json.dumps({
+            "target_x": 0.3,
+            "target_y": 0.7,
+            "features": [0.2] * 10,
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+
+    sample = load_dataset(tmp_path)[0]
+    assert sample.target == (0.3, 0.7)
+    assert sample.features == (0.2,) * 10
