@@ -10,6 +10,11 @@ from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from gazetype.blink import DeliberateBlinkDetector
 from gazetype.calibration import CalibrationAdapterModel, CalibrationModel, calibration_targets
+from gazetype.dataset_collector import (
+    MouseDatasetCollector,
+    ScreenGeometry,
+    guided_target_sequence,
+)
 from gazetype.gaze_model import (
     build_direct_general_predictor,
     build_runtime_predictor,
@@ -163,6 +168,7 @@ class GazetypeController:
         self.toggle = ToggleWindow()
         self.tracking_window = TrackingWindow()
         self.worker: CameraWorker | None = None
+        self.dataset_collector: MouseDatasetCollector | None = None
         self.input_sender = create_input_sender()
         self.landing = LandingDetector(SENSITIVITY_PROFILES[self.settings.sensitivity])
         self.blink = DeliberateBlinkDetector()
@@ -180,6 +186,7 @@ class GazetypeController:
 
         self.settings_window.start_requested.connect(self.begin_calibration)
         self.settings_window.model_start_requested.connect(self.begin_general_model)
+        self.settings_window.dataset_requested.connect(self.begin_dataset_collection)
         self.calibration_window.completed.connect(self.finish_calibration)
         self.calibration_window.cancelled.connect(self.cancel_calibration)
         self.toggle.toggled.connect(self.toggle_keyboard)
@@ -240,7 +247,7 @@ class GazetypeController:
             adaptive_gaze_filter=bool(values["adaptive_gaze_filter"]),
             robust_calibration=bool(values["robust_calibration"]),
             use_general_gaze_model=bool(values["use_general_gaze_model"]),
-            general_gaze_model_path=self.settings.general_gaze_model_path,
+            general_gaze_model_path=str(values["general_gaze_model_path"]),
             collect_training_samples=bool(values["collect_training_samples"]),
             collect_training_images=self.settings.collect_training_images,
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
@@ -301,7 +308,7 @@ class GazetypeController:
             return
         predictor = build_direct_general_predictor(
             use_general_model,
-            self.settings.general_gaze_model_path,
+            str(values["general_gaze_model_path"]),
         )
         if predictor is None:
             self.settings_window.set_status(
@@ -326,7 +333,7 @@ class GazetypeController:
             adaptive_gaze_filter=bool(values["adaptive_gaze_filter"]),
             robust_calibration=bool(values["robust_calibration"]),
             use_general_gaze_model=True,
-            general_gaze_model_path=self.settings.general_gaze_model_path,
+            general_gaze_model_path=str(values["general_gaze_model_path"]),
             collect_training_samples=bool(values["collect_training_samples"]),
             collect_training_images=self.settings.collect_training_images,
             horizontal_gain_percent=int(values["horizontal_gain_percent"]),
@@ -361,6 +368,37 @@ class GazetypeController:
         self.tracking_window.show()
         self.settings_window.showMinimized()
         self.settings_window.unlock()
+
+    def begin_dataset_collection(self, values: dict[str, object], moving: bool) -> None:
+        screens = self.application.screens()
+        screen_index = int(values["screen_index"])
+        if screen_index >= len(screens):
+            self.settings_window.set_status("Seçilen ekran artık bağlı değil.", True)
+            self.settings_window.unlock()
+            self._refresh_screens()
+            return
+        screen = screens[screen_index]
+        self._stop_worker()
+        if self.dataset_collector is not None:
+            self.dataset_collector.close()
+            self.dataset_collector = None
+        output_path = default_training_samples_path().with_name("gazetype_manifest.jsonl")
+        geometry = ScreenGeometry.from_rect(screen.geometry())
+        self.dataset_collector = MouseDatasetCollector(
+            int(values["camera_index"]),
+            output_path,
+            geometry,
+            bool(values["quadrilateral_eye_mapping"]),
+            samples_per_capture=6,
+            guided_targets=() if moving else guided_target_sequence(180, 13),
+            moving_target=moving,
+            duration_seconds=120,
+            reaction_lag_ms=250,
+        )
+        self.dataset_collector.destroyed.connect(lambda: self.settings_window.unlock())
+        self.dataset_collector.showFullScreen()
+        mode = "hareketli hedef" if moving else "nokta hedef"
+        self.settings_window.set_status(f"{mode} dataset kaydı başladı: {output_path}")
 
     def finish_calibration(self, features, targets) -> None:
         try:
@@ -560,6 +598,8 @@ class GazetypeController:
     def shutdown(self) -> None:
         self.settings_window.stop_camera_previews()
         self._stop_worker()
+        if self.dataset_collector is not None:
+            self.dataset_collector.close()
         self.tracking_window.close()
         self.tray.hide()
         self.application.quit()
