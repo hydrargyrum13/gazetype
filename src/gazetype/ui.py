@@ -732,7 +732,7 @@ class ToggleWindow(QWidget):
         color = "#2cc997" if enabled else "#ef5b5b"
         self.button.setStyleSheet(
             f"QPushButton {{ color: white; background: #111722; border: 3px solid {color};"
-            " border-radius: 12px; font-size: 11px; font-weight: 700; }}"
+            " border-radius: 12px; font-size: 11px; font-weight: 700; }"
         )
 
 
