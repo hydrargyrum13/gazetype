@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -61,13 +62,13 @@ class CameraPreviewCard(QPushButton):
         super().__init__()
         self.camera_index = camera_index
         self.setCheckable(True)
-        self.setMinimumSize(188, 142)
+        self.setMinimumSize(164, 122)
         self.setCursor(Qt.PointingHandCursor)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         self.preview = QLabel("Kamera aranıyor…")
         self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setMinimumSize(170, 96)
+        self.preview.setMinimumSize(148, 78)
         self.preview.setStyleSheet("background: #080b11; color: #aebacc; border-radius: 5px;")
         self.caption = QLabel(f"Kamera {camera_index + 1}")
         self.caption.setAlignment(Qt.AlignCenter)
@@ -118,8 +119,12 @@ class SettingsWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Gazetype")
         self.setMinimumSize(540, 680)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         root = QWidget()
-        self.setCentralWidget(root)
+        scroll.setWidget(root)
+        self.setCentralWidget(scroll)
         layout = QVBoxLayout(root)
         title = QLabel("Gazetype")
         title.setStyleSheet("font-size: 28px; font-weight: 700;")
@@ -282,6 +287,7 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(dataset_row)
         self.setStyleSheet(
             "QMainWindow, QWidget { background: #111722; color: #f6f8fc; font-size: 14px; }"
+            "QScrollArea { background: #111722; border: none; }"
             "QComboBox, QLineEdit, QPushButton { padding: 8px; background: #202837; border: 1px solid #526078; border-radius: 6px; }"
             "QTabWidget::pane { border: 1px solid #2d384b; border-radius: 6px; }"
             "QTabBar::tab { padding: 8px 12px; background: #182131; border: 1px solid #2d384b; }"
