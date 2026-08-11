@@ -114,7 +114,7 @@ Linux'ta varsayılan kayıt klasörü `~/.local/share/gazetype` olduğu için e�
 komutu şu şekilde çalıştırılabilir:
 
 ```bash
-python -m gazetype.dataset_collector --camera-index 0 --moving --duration-seconds 120 --reaction-lag-ms 250 --out ~/.local/share/gazetype/gazetype_manifest.jsonl
+python -m gazetype.dataset_collector --camera-index 0 --moving --duration-seconds 120 --reaction-lag-ms 250 --countdown-seconds 3 --out ~/.local/share/gazetype/gazetype_manifest.jsonl
 python -m tools.train_gaze_model --dataset weyeds --data-dir ~/.local/share/gazetype --out models/personal_general.npz --polynomial-degree 1
 GAZETYPE_GENERAL_MODEL=models/personal_general.npz python -m gazetype
 ```
@@ -124,11 +124,12 @@ Uygulamada gelişmiş ayarlardan "Genel gaze modelini kullan" seçeneğini açı
 kalibrasyon objesi olmadan kullanılır.
 
 Ana penceredeki "Hareketli Dataset" düğmesi de aynı akışı başlatır: hedef
-ekranı dolaşırken her kamera frame'i kaydedilir ve varsayılan 250 ms takip
-gecikmesi hesaba katılır. "Nokta Dataset" modu ise her hedef için Space veya sol
-tık bekler. İyi sonuç için her kafa/oturuş pozisyonunda ekranın tamamını
-dolaşın; sadece belirli ekran bölgelerini belirli kafa pozisyonlarında toplamak
-modelin hedef yerine kafa pozisyonunu öğrenmesine yol açabilir.
+başlangıç pozisyonunda durur, 3-2-1 sayar, sonra farklı bir rota ile ekranı
+dolaşırken her kamera frame'i kaydedilir ve varsayılan 250 ms takip gecikmesi
+hesaba katılır. "Nokta Dataset" modu ise her hedef için Space veya sol tık
+bekler. İyi sonuç için her kafa/oturuş pozisyonunda ekranın tamamını dolaşın;
+sadece belirli ekran bölgelerini belirli kafa pozisyonlarında toplamak modelin
+hedef yerine kafa pozisyonunu öğrenmesine yol açabilir.
 
 ### WEyeDS support
 
