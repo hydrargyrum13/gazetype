@@ -14,6 +14,8 @@ from gazetype.calibration import (
 )
 from gazetype.models import KeyboardLayout, Sensitivity
 
+MAX_SETTINGS_BYTES = 1024 * 1024
+
 
 @dataclass(slots=True)
 class AppSettings:
@@ -43,12 +45,14 @@ class AppSettings:
     calibration_adapter: CalibrationAdapterModel | None = None
 
     def __post_init__(self) -> None:
-        # Qt stores StrEnum values as plain strings inside QVariant/QComboBox.
-        # Normalize at the boundary so persistence always sees real enums.
         if not isinstance(self.layout, KeyboardLayout):
             self.layout = KeyboardLayout(str(self.layout))
         if not isinstance(self.sensitivity, Sensitivity):
             self.sensitivity = Sensitivity(str(self.sensitivity))
+        self.camera_index = max(0, min(int(self.camera_index), 64))
+        self.screen_name = str(self.screen_name)[:256]
+        self.screen_geometry = str(self.screen_geometry)[:256]
+        self.general_gaze_model_path = str(self.general_gaze_model_path)[:4096]
         self.calibration_point_count = max(
             MINIMUM_CALIBRATION_POINTS,
             min(int(self.calibration_point_count), MAXIMUM_CALIBRATION_POINTS),
@@ -133,14 +137,20 @@ class SettingsStore:
         if not self.path.exists():
             return AppSettings()
         try:
-            return AppSettings.from_dict(json.loads(self.path.read_text(encoding="utf-8")))
+            if self.path.stat().st_size > MAX_SETTINGS_BYTES:
+                return AppSettings()
+            parsed = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(parsed, dict):
+                return AppSettings()
+            return AppSettings.from_dict(parsed)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return AppSettings()
 
     def save(self, settings: AppSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        payload = json.dumps(settings.to_dict(), ensure_ascii=False, indent=2)
+        if len(payload.encode("utf-8")) > MAX_SETTINGS_BYTES:
+            raise ValueError("Settings payload is unexpectedly large")
+        temporary.write_text(payload, encoding="utf-8")
         temporary.replace(self.path)

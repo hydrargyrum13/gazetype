@@ -29,4 +29,4 @@ def test_configure_numeric_locale_forces_c_decimal_parsing() -> None:
             os.environ.pop("LC_NUMERIC", None)
         else:
             os.environ["LC_NUMERIC"] = original_env
-        locale.setlocale(locale.LC_NUMERIC, original_locale)
+        locale.setlocale(locale.LC_ALL, original_locale)
